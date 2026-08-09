@@ -15,3 +15,11 @@ _ALLOWED_TRANSITIONS = {
     CallState.THINKING: {CallState.SPEAKING, CallState.LISTENING},  # LISTENING = e.g. LLM error, retry
     CallState.SPEAKING: {CallState.LISTENING},  # includes barge-in interrupts
 }
+
+class InvalidTransition(Exception):
+    pass
+
+class CallStateMachine:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self._state = CallState.LISTENING
