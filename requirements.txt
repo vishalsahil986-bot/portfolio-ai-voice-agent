@@ -1,6 +1,25 @@
+#Phase 1
 fastapi[standard]==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 websockets==13.1
+
+#phase 2
+webrtcvad==2.0.10
+numpy==1.26.4
+openai-whisper==20231117
+elevenlabs==2.62.0
+setuptools<81
+ 
+# Phase 3 (LLM):
+google-generativeai  
+  
+# Phase 4 (RAG — Pinecone):
+pinecone-client         
+sentence-transformers  
+
+# Phase 5 (Memory — MongoDB):
+pymongo                 
+motor                   
