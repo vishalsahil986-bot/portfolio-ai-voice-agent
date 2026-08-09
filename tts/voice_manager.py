@@ -23,3 +23,18 @@ class ElevenLabsVoiceManager:
  
         self._current_index = 0
         self._client = self._build_client() if self.api_keys else None
+
+    def _build_client(self) -> ElevenLabs:
+        return ElevenLabs(api_key=self.api_keys[self._current_index])
+ 
+    def _rotate_to_next_key(self) -> bool:
+        """Move to the next key in the pool. Returns False if we've already tried them all."""
+        if self._current_index + 1 >= len(self.api_keys):
+            return False
+        self._current_index += 1
+        logger.warning(
+            f"ElevenLabs account {self._current_index} exhausted/unauthorized — "
+            f"rotating to account {self._current_index + 1} of {len(self.api_keys)}"
+        )
+        self._client = self._build_client()
+        return True
