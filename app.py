@@ -19,4 +19,13 @@ def create_app() -> FastAPI:
  
     app.include_router(health_router)
     app.include_router(websocket_router)
+
+    
+    @app.on_event("startup")
+    async def on_startup():
+        logger.info("AI Voice Agent backend starting up (Phase 1: skeleton)")
  
+    return app
+ 
+ 
+app = create_app()
