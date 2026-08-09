@@ -35,3 +35,9 @@ class CallStateMachine:
             )
         logger.info(f"[{self.session_id}] {self._state} -> {new_state}")
         self._state = new_state
+
+    def interrupt(self) -> None:
+        """Force-return to LISTENING from any state — used for barge-in."""
+        if self._state != CallState.LISTENING:
+            logger.info(f"[{self.session_id}] INTERRUPT: {self._state} -> LISTENING")
+            self._state = CallState.LISTENING
