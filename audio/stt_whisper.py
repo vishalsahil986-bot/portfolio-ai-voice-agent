@@ -18,3 +18,9 @@ class WhisperSTT:
             compute_type = "float16" if self.device == "cuda" else "int8"
             self._model = WhisperModel(self.model_size, device=self.device, compute_type=compute_type)
             logger.info("faster-whisper model loaded")
+
+    @staticmethod
+    def pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
+        """faster-whisper wants float32 samples in [-1, 1]; our pipeline carries 16-bit PCM."""
+        int16_samples = np.frombuffer(pcm_bytes, dtype=np.int16)
+        return int16_samples.astype(np.float32) / 32768.0
