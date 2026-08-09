@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEYS2: str = ""
     ELEVENLABS_API_KEYS3: str = ""
     ELEVENLABS_VOICE_ID: str = ""
+    ELEVENLABS_MODEL_ID: str = "eleven_flash_v2_5"
 
     @property
     def ELEVENLABS_API_KEYS(self) -> List[str]:
