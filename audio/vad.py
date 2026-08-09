@@ -31,3 +31,22 @@ class VoiceActivityDetector:
         """
         if aggressiveness not in (0, 1, 2, 3):
             raise ValueError("aggressiveness must be 0-3")
+
+        self.sample_rate = sample_rate or settings.AUDIO_SAMPLE_RATE
+        self.frame_ms = frame_ms or settings.AUDIO_CHUNK_MS
+        if self.frame_ms not in (10, 20, 30):
+            raise ValueError("frame_ms must be 10, 20, or 30 (webrtcvad requirement)")
+ 
+        self._vad = webrtcvad.Vad(aggressiveness)
+        self._bytes_per_frame = int(self.sample_rate * (self.frame_ms / 1000.0) * 2)  # 16-bit = 2 bytes/sample
+ 
+        self.speech_confirm_frames = speech_confirm_frames
+        self.silence_confirm_frames = int(
+            (silence_confirm_ms or settings.SILENCE_THRESHOLD_MS) / self.frame_ms
+        )
+ 
+        # Rolling state used by process_frame()
+        self._recent_speech_flags = collections.deque(maxlen=speech_confirm_frames)
+        self._consecutive_silence_frames = 0
+        self.is_speaking = False
+ 
