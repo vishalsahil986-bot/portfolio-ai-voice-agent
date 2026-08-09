@@ -88,3 +88,8 @@ class VoiceActivityDetector:
                 return "speech_ended"
  
         return None
+
+    def reset(self) -> None:
+        self._recent_speech_flags.clear()
+        self._consecutive_silence_frames = 0
+        self.is_speaking = False
