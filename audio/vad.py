@@ -68,3 +68,11 @@ class VoiceActivityDetector:
         """
         speech = self.is_speech_frame(frame)
         self._recent_speech_flags.append(speech)
+
+        if not self.is_speaking:
+            if len(self._recent_speech_flags) == self.speech_confirm_frames and all(self._recent_speech_flags):
+                self.is_speaking = True
+                self._consecutive_silence_frames = 0
+                logger.info("VAD: speech_started")
+                return "speech_started"
+            return None
