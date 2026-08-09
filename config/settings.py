@@ -24,3 +24,7 @@ class Settings(BaseSettings):
         """Ordered rotation pool — empty/unset slots are dropped automatically."""
         keys = [self.GEMINI_API_KEY1, self.GEMINI_API_KEY2, self.GEMINI_API_KEY3, self.GEMINI_API_KEY4]
         return [k for k in keys if k.strip()]
+
+    #STT (Whisper, local/open-source)
+    WHISPER_MODEL_SIZE: str = "base" # tiny | base | small | medium | large
+    WHISPER_DEVICE: str = "cpu" # cpu | cuda
