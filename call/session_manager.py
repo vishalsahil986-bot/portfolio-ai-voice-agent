@@ -21,3 +21,22 @@ class SessionManager:
  
     def __init__(self):
         self._sessions: Dict[str, Session] = {}
+
+    def create_session(self) -> Session:
+        session_id = str(uuid.uuid4())
+        session = Session(session_id=session_id)
+        self._sessions[session_id] = session
+        logger.info(f"Session created: {session_id}")
+        return session
+ 
+    def get_session(self, session_id: str) -> Session | None:
+        return self._sessions.get(session_id)
+ 
+    def end_session(self, session_id: str) -> None:
+        if session_id in self._sessions:
+            del self._sessions[session_id]
+            logger.info(f"Session ended: {session_id}")
+ 
+ 
+# One shared instance for the whole app.
+session_manager = SessionManager()
