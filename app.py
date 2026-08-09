@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
- 
+from fastapi.staticfiles import StaticFiles
 from api.health_routes import router as health_router
 from api.websocket_routes import router as websocket_router
 from utils.logger import get_logger
- 
+
 logger = get_logger(__name__)
 
 def create_app() -> FastAPI:
@@ -16,16 +16,16 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
- 
+
     app.include_router(health_router)
     app.include_router(websocket_router)
+    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
-    
     @app.on_event("startup")
     async def on_startup():
-        logger.info("AI Voice Agent backend starting up (Phase 1: skeleton)")
- 
+        logger.info("AI Voice Agent backend starting up (Phase 2: voice loop)")
+
     return app
- 
- 
+
+
 app = create_app()
