@@ -24,3 +24,22 @@ class WhisperSTT:
         """faster-whisper wants float32 samples in [-1, 1]; our pipeline carries 16-bit PCM."""
         int16_samples = np.frombuffer(pcm_bytes, dtype=np.int16)
         return int16_samples.astype(np.float32) / 32768.0
+
+    def transcribe(self, pcm_bytes: bytes, language: str = "en") -> str:
+        """
+        pcm_bytes: raw 16-bit mono PCM at settings.AUDIO_SAMPLE_RATE (16000Hz),
+        i.e. exactly what UtteranceBuffer.get_audio() returns.
+        Returns the transcribed text, stripped, empty string if nothing detected.
+        """
+        if not pcm_bytes:
+            return ""
+ 
+        self._ensure_loaded()
+        audio = self.pcm_bytes_to_float32(pcm_bytes)
+ 
+        segments, _info = self._model.transcribe(audio, language=language)
+        text = " ".join(segment.text for segment in segments).strip()
+        logger.info(f"Whisper transcribed: '{text}'")
+        return text
+  
+whisper_stt = WhisperSTT()
