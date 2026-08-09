@@ -49,4 +49,12 @@ class VoiceActivityDetector:
         self._recent_speech_flags = collections.deque(maxlen=speech_confirm_frames)
         self._consecutive_silence_frames = 0
         self.is_speaking = False
- 
+
+    def is_speech_frame(self, frame: bytes) -> bool:
+        """Raw per-frame check, no state. frame must be exactly one frame's worth of PCM bytes."""
+        if len(frame) != self._bytes_per_frame:
+            raise ValueError(
+                f"Expected {self._bytes_per_frame} bytes for a {self.frame_ms}ms frame "
+                f"at {self.sample_rate}Hz, got {len(frame)}"
+            )
+        return self._vad.is_speech(frame, self.sample_rate)
