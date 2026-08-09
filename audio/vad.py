@@ -58,3 +58,13 @@ class VoiceActivityDetector:
                 f"at {self.sample_rate}Hz, got {len(frame)}"
             )
         return self._vad.is_speech(frame, self.sample_rate)
+
+    def process_frame(self, frame: bytes) -> Optional[str]:
+        """
+        Feed one frame at a time. Returns:
+          "speech_started"  - user just started talking (state flips False -> True)
+          "speech_ended"    - user just stopped talking, long enough to count as turn end
+          None              - no state change yet, keep buffering
+        """
+        speech = self.is_speech_frame(frame)
+        self._recent_speech_flags.append(speech)
