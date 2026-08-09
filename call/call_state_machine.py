@@ -23,3 +23,15 @@ class CallStateMachine:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self._state = CallState.LISTENING
+
+    @property
+    def state(self) -> CallState:
+        return self._state
+ 
+    def transition(self, new_state: CallState) -> None:
+        if new_state not in _ALLOWED_TRANSITIONS[self._state]:
+            raise InvalidTransition(
+                f"[{self.session_id}] Cannot go {self._state} -> {new_state}"
+            )
+        logger.info(f"[{self.session_id}] {self._state} -> {new_state}")
+        self._state = new_state
