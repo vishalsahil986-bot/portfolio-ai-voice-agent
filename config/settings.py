@@ -28,3 +28,14 @@ class Settings(BaseSettings):
     #STT (Whisper, local/open-source)
     WHISPER_MODEL_SIZE: str = "base" # tiny | base | small | medium | large
     WHISPER_DEVICE: str = "cpu" # cpu | cuda
+
+    #TTS (ElevenLabs) 
+    ELEVENLABS_API_KEYS1: str = ""
+    ELEVENLABS_API_KEYS2: str = ""
+    ELEVENLABS_API_KEYS3: str = ""
+    ELEVENLABS_VOICE_ID: str = ""
+
+    @property
+    def ELEVENLABS_API_KEYS(self) -> List[str]:
+        keys = [self.ELEVENLABS_API_KEYS1, self.ELEVENLABS_API_KEYS2, self.ELEVENLABS_API_KEYS3]
+        return [k for k in keys if k.strip()]
