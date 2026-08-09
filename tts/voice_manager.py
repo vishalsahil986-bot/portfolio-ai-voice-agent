@@ -38,3 +38,42 @@ class ElevenLabsVoiceManager:
         )
         self._client = self._build_client()
         return True
+
+    @staticmethod
+    def _is_quota_or_auth_error(exc: Exception) -> bool:
+        status = getattr(exc, "status_code", None)
+        return status in (401, 403, 429)
+ 
+    def synthesize(self, text: str) -> bytes:
+        """
+        Convert text to speech, returns raw audio bytes (mp3 by default
+        from the ElevenLabs API). Rotates through the key pool on
+        quota/auth failures, raises AllElevenLabsKeysExhausted if every
+        account is out.
+        """
+        if not self._client:
+            raise RuntimeError("ElevenLabsVoiceManager has no API keys configured")
+ 
+        keys_tried = 0
+        while keys_tried < len(self.api_keys):
+            try:
+                audio_stream = self._client.text_to_speech.convert(
+                    voice_id=self.voice_id,
+                    model_id=self.model_id,
+                    text=text,
+                )
+                return b"".join(audio_stream)
+ 
+            except ApiError as e:
+                keys_tried += 1
+                if self._is_quota_or_auth_error(e) and self._rotate_to_next_key():
+                    continue  # retry with the new key
+                if keys_tried >= len(self.api_keys):
+                    break
+                raise  
+ 
+        raise AllElevenLabsKeysExhausted(
+            f"All {len(self.api_keys)} ElevenLabs accounts failed with quota/auth errors"
+        )
+ 
+voice_manager = ElevenLabsVoiceManager()
