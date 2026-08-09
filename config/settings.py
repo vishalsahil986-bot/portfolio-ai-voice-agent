@@ -39,3 +39,8 @@ class Settings(BaseSettings):
     def ELEVENLABS_API_KEYS(self) -> List[str]:
         keys = [self.ELEVENLABS_API_KEYS1, self.ELEVENLABS_API_KEYS2, self.ELEVENLABS_API_KEYS3]
         return [k for k in keys if k.strip()]
+
+    #Audio
+    AUDIO_SAMPLE_RATE: int = 16000
+    AUDIO_CHUNK_MS: int = 30  # size of each audio chunk processed by VAD
+    SILENCE_THRESHOLD_MS: int = 700  # how long silence must last before we treat speech as finished
