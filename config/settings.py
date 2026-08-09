@@ -44,3 +44,11 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000
     AUDIO_CHUNK_MS: int = 30  # size of each audio chunk processed by VAD
     SILENCE_THRESHOLD_MS: int = 700  # how long silence must last before we treat speech as finished
+
+@lru_cache
+def get_settings() -> Settings:
+    """Settings are read from env once and cached — call get_settings() anywhere you need config."""
+    return Settings()
+ 
+ 
+settings = get_settings()
