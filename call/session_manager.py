@@ -15,3 +15,9 @@ class Session:
  
     def __post_init__(self):
         self.state_machine = CallStateMachine(self.session_id)
+
+class SessionManager:
+    """In-memory session registry. Fine for Phase 1; swap for Redis in production (see docs)."""
+ 
+    def __init__(self):
+        self._sessions: Dict[str, Session] = {}
