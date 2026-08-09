@@ -21,3 +21,21 @@ class FrameBuffer:
  
     def reset(self) -> None:
         self._buffer.clear()
+
+class UtteranceBuffer:
+    def __init__(self):
+        self._chunks: List[bytes] = []
+ 
+    def add(self, frame: bytes) -> None:
+        self._chunks.append(frame)
+ 
+    def get_audio(self) -> bytes:
+        return b"".join(self._chunks)
+ 
+    def duration_seconds(self) -> float:
+        total_bytes = sum(len(c) for c in self._chunks)
+        # 16-bit mono PCM = 2 bytes per sample
+        return total_bytes / 2 / settings.AUDIO_SAMPLE_RATE
+ 
+    def reset(self) -> None:
+        self._chunks.clear()
