@@ -76,3 +76,15 @@ class VoiceActivityDetector:
                 logger.info("VAD: speech_started")
                 return "speech_started"
             return None
+
+        if speech:
+            self._consecutive_silence_frames = 0
+        else:
+            self._consecutive_silence_frames += 1
+            if self._consecutive_silence_frames >= self.silence_confirm_frames:
+                self.is_speaking = False
+                self._recent_speech_flags.clear()
+                logger.info("VAD: speech_ended")
+                return "speech_ended"
+ 
+        return None
