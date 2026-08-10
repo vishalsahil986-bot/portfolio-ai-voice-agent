@@ -11,11 +11,25 @@ SYSTEM_INSTRUCTION = (
     "when spoken, not read off a page."
 )
 
-def build_contents(conversation_history: List[dict], new_user_text: str) -> List[types.Content]:
 
+def build_contents_with_context(
+    conversation_history: List[dict],
+    new_user_text: str,
+    retrieved_context: str = "",
+) -> List[types.Content]:
+    """Same as build_contents but injects RAG context into the user turn."""
+    context_prefix = (
+        f"[Relevant context from knowledge base:\n{retrieved_context}\n]\n\n"
+        if retrieved_context else ""
+    )
     contents = [
         types.Content(role=turn["role"], parts=[types.Part(text=turn["text"])])
         for turn in conversation_history
     ]
-    contents.append(types.Content(role="user", parts=[types.Part(text=new_user_text)]))
+    contents.append(
+        types.Content(
+            role="user",
+            parts=[types.Part(text=f"{context_prefix}{new_user_text}")]
+        )
+    )
     return contents
