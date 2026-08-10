@@ -63,4 +63,26 @@ class PineconeVectorStore:
         ]
         self._index.upsert(vectors=vectors)
         logger.info(f"Upserted {len(vectors)} chunks into Pinecone index '{self.index_name}'")
- 
+
+    def query(self, embedding: List[float], top_k: int = 3) -> List[dict]:
+        """
+        embedding: the query's embedding vector (same model as what
+        was used to embed the stored chunks — see rag/embeddings.py).
+        Returns [{"text": str, "source": str, "score": float}, ...],
+        best match first. Empty list if the index has nothing in it
+        yet or isn't configured.
+        """
+        if not self.is_configured:
+            return []
+        self._ensure_index()
+        result = self._index.query(vector=embedding, top_k=top_k, include_metadata=True)
+        return [
+            {
+                "text": match.metadata.get("text", ""),
+                "source": match.metadata.get("source", ""),
+                "score": match.score,
+            }
+            for match in result.matches
+        ]
+
+vector_store = PineconeVectorStore()
