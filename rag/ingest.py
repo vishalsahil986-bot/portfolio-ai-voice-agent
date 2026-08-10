@@ -26,5 +26,15 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
         start = end - overlap 
     return [c for c in chunks if c]
  
+def load_documents() -> List[dict]:
+    """Reads every .txt/.md file in knowledge_base/. Returns [{"source": filename, "text": full_text}, ...]."""
+    paths = glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.txt")) + glob.glob(
+        os.path.join(KNOWLEDGE_BASE_DIR, "*.md")
+    )
+    documents = []
+    for path in paths:
+        with open(path, "r", encoding="utf-8") as f:
+            documents.append({"source": os.path.basename(path), "text": f.read()})
+    return documents
  
  
