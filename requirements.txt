@@ -1,25 +1,26 @@
-#Phase 1
-fastapi[standard]==0.115.0
+# Phase 1: backend skeleton 
+fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 websockets==13.1
 
-#phase 2
+#  Phase 2: voice loop (VAD + Whisper STT + ElevenLabs TTS) 
 webrtcvad==2.0.10
 numpy==1.26.4
-openai-whisper==20231117
+faster-whisper==1.0.3
 elevenlabs==2.62.0
 setuptools<81
- 
+
 # Phase 3 (LLM):
-google-generativeai  
-  
+google-genai
+
+
 # Phase 4 (RAG — Pinecone):
-pinecone-client         
-sentence-transformers  
+pinecone        
+sentence-transformers   
 
 # Phase 5 (Memory — MongoDB):
-pymongo                 
-motor                   
+pymongo            
+motor                
