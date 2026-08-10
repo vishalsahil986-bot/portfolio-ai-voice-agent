@@ -62,3 +62,28 @@ class GeminiService:
         contents = build_contents(conversation_history, user_text)
  
         keys_tried = 0
+        while keys_tried < len(self.api_keys):
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
+                )
+                text = (response.text or "").strip()
+                logger.info(f"Gemini replied: '{text}'")
+                return text
+ 
+            except APIError as e:
+                keys_tried += 1
+                if self._is_quota_or_auth_error(e) and self._rotate_to_next_key():
+                    continue  
+                if keys_tried >= len(self.api_keys):
+                    break
+                raise  
+ 
+        raise AllGeminiKeysExhausted(
+            f"All {len(self.api_keys)} Gemini keys failed with quota/auth errors"
+        )
+ 
+
+gemini_service = GeminiService()
