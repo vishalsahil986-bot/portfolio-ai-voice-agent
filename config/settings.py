@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_ID2: str = ""
     ELEVENLABS_API_KEYS3: str = ""
     ELEVENLABS_VOICE_ID3: str = ""
+    ELEVENLABS_API_KEYS4: str = ""
+    ELEVENLABS_VOICE_ID4: str = ""
+    ELEVENLABS_API_KEYS5: str = ""
+    ELEVENLABS_VOICE_ID5: str = ""
+    ELEVENLABS_API_KEYS6: str = ""
+    ELEVENLABS_VOICE_ID6: str = ""
+    ELEVENLABS_API_KEYS7: str = ""
+    ELEVENLABS_VOICE_ID7: str = ""
+    ELEVENLABS_API_KEYS8: str = ""
+    ELEVENLABS_VOICE_ID8: str = ""
     ELEVENLABS_MODEL_ID: str = "eleven_flash_v2_5"
 
     @property
@@ -62,6 +72,16 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000
     AUDIO_CHUNK_MS: int = 30  
     SILENCE_THRESHOLD_MS: int = 700  
+
+
+    # --- RAG (Pinecone + HuggingFace) ---
+    PINECONE_API_KEY: str = Field(default="")
+    PINECONE_INDEX_NAME: str = "voice-agent"
+    PINECONE_CLOUD: str = "aws"
+    PINECONE_REGION: str = "us-east-1"
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSION: int = 384
+    RAG_TOP_K: int = 3
 
 
 @lru_cache
