@@ -37,4 +37,31 @@ def load_documents() -> List[dict]:
             documents.append({"source": os.path.basename(path), "text": f.read()})
     return documents
  
+def run_ingestion() -> None:
+    documents = load_documents()
+    if not documents:
+        logger.warning(f"No .txt/.md files found in {KNOWLEDGE_BASE_DIR} — nothing to ingest")
+        return
  
+    all_chunks = []
+    for doc in documents:
+        pieces = chunk_text(doc["text"])
+        for i, piece in enumerate(pieces):
+            chunk_hash = hashlib.sha1(piece.encode("utf-8")).hexdigest()[:8]
+            all_chunks.append({
+                "id": f"{doc['source']}-{i}-{chunk_hash}",
+                "text": piece,
+                "source": doc["source"],
+            })
+ 
+    logger.info(f"Chunked {len(documents)} documents into {len(all_chunks)} chunks, embedding...")
+    embeddings = embedding_service.embed_batch([c["text"] for c in all_chunks])
+    for chunk, embedding in zip(all_chunks, embeddings):
+        chunk["embedding"] = embedding
+ 
+    vector_store.upsert_chunks(all_chunks)
+    logger.info("Ingestion complete")
+ 
+ 
+if __name__ == "__main__":
+    run_ingestion()
