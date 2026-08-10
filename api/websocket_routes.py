@@ -1,18 +1,3 @@
-"""
-The real-time audio channel between the browser and the backend.
-
-Phase 2: the full loop now runs — browser sends raw 16-bit PCM audio
-chunks -> FrameBuffer slices them into fixed VAD frames -> VAD decides
-when the user starts/stops talking -> the full utterance goes to
-Whisper -> (dummy echo reply — Phase 3 replaces this with Gemini) ->
-ElevenLabs turns the reply into speech -> the mp3 bytes go straight
-back down this same socket for the browser to play.
-
-Audio format contract with the frontend (see frontend/app.js):
-16-bit signed PCM, mono, 16000Hz, sent as raw binary WebSocket frames.
-Any other format will make VAD raise a ValueError on frame size.
-"""
-
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -21,6 +6,8 @@ from audio.stt_whisper import whisper_stt
 from call.call_state_machine import CallState
 from call.session_manager import Session, session_manager
 from elevenlabs.core.api_error import ApiError
+from google.genai.errors import APIError as GeminiApiError
+from llm.gemini_service import AllGeminiKeysExhausted, gemini_service
 from tts.voice_manager import AllElevenLabsKeysExhausted, voice_manager
 from utils.logger import get_logger
 
@@ -30,10 +17,6 @@ router = APIRouter()
 
 async def _handle_speech_started(session: Session) -> None:
     if session.state_machine.state == CallState.SPEAKING:
-        # Barge-in: user started talking while the agent was still
-        # speaking. Snap back to LISTENING immediately and mark this
-        # turn as interrupted so a reply that's already mid-flight
-        # doesn't get sent once it finishes.
         session.state_machine.interrupt()
         session.interrupted = True
     session.utterance_buffer.reset()
@@ -49,9 +32,6 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
     session.interrupted = False
     session.state_machine.transition(CallState.THINKING)
 
-    # Whisper and ElevenLabs are both blocking calls — run them off
-    # the event loop so this connection can still receive/ack other
-    # messages (and so one slow session can't stall every other call).
     text = await asyncio.to_thread(whisper_stt.transcribe, audio)
 
     if not text:
@@ -60,9 +40,28 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
 
     await websocket.send_json({"type": "transcript", "text": text})
 
-    # Dummy "brain" for Phase 2 — proves the full loop works end to
-    # end. Phase 3 replaces this one line with a real Gemini call.
-    reply_text = f"You said: {text}"
+    try:
+        reply_text = await asyncio.to_thread(
+            gemini_service.generate_reply, session.conversation_history, text
+        )
+    except AllGeminiKeysExhausted:
+        logger.error(f"[{session.session_id}] all Gemini keys exhausted, skipping this turn")
+        session.state_machine.transition(CallState.LISTENING)
+        return
+    except GeminiApiError as e:
+        # Same rationale as the ElevenLabs ApiError catch below — an
+        # error rotation can't fix (bad request, model unavailable,
+        # etc.) should fail this one turn, not the whole call.
+        logger.error(f"[{session.session_id}] Gemini call failed: {e}")
+        session.state_machine.transition(CallState.LISTENING)
+        return
+
+    if not reply_text:
+        session.state_machine.transition(CallState.LISTENING)
+        return
+
+    session.conversation_history.append({"role": "user", "text": text})
+    session.conversation_history.append({"role": "model", "text": reply_text})
 
     session.state_machine.transition(CallState.SPEAKING)
 
@@ -73,17 +72,11 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
         session.state_machine.transition(CallState.LISTENING)
         return
     except ApiError as e:
-        # Covers errors rotation can't fix (e.g. 402 "library voice needs
-        # a paid plan", 400 bad request) — same account failing again on
-        # every key wouldn't help, so just skip TTS for this turn instead
-        # of crashing the whole call.
         logger.error(f"[{session.session_id}] ElevenLabs TTS failed: {e}")
         session.state_machine.transition(CallState.LISTENING)
         return
 
     if session.interrupted:
-        # User started talking again while we were synthesizing — drop
-        # this reply instead of talking over them.
         logger.info(f"[{session.session_id}] reply discarded, user interrupted during synthesis")
     else:
         await websocket.send_json({"type": "reply_text", "text": reply_text})
