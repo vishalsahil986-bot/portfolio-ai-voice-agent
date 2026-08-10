@@ -24,3 +24,13 @@ class EmbeddingService:
         self._ensure_loaded()
         vector: np.ndarray = self._model.encode(text, normalize_embeddings=True)
         return vector.tolist()
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Embed many strings at once — used at ingest time, much faster than embedding one at a time in a loop."""
+        if not texts:
+            return []
+        self._ensure_loaded()
+        vectors: np.ndarray = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        return vectors.tolist()
+ 
+embedding_service = EmbeddingService()
