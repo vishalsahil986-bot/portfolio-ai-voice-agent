@@ -39,3 +39,26 @@ class GeminiService:
         )
         self._client = self._build_client()
         return True
+
+    @staticmethod
+    def _is_quota_or_auth_error(exc: Exception) -> bool:
+        code = getattr(exc, "code", None)
+        return code in (401, 403, 429)
+ 
+    def generate_reply(self, conversation_history: List[dict], user_text: str) -> str:
+        """
+        conversation_history: [{"role": "user"|"model", "text": str}, ...]
+        for this call so far (Phase 3: full history, no trimming —
+        Phase 5 replaces this with summarized context).
+        user_text: what the user just said (already transcribed by Whisper).
+ 
+        Returns the agent's reply text. Rotates through the key pool
+        on quota/auth failures, raises AllGeminiKeysExhausted if every
+        key is out.
+        """
+        if not self._client:
+            raise RuntimeError("GeminiService has no API keys configured")
+ 
+        contents = build_contents(conversation_history, user_text)
+ 
+        keys_tried = 0
