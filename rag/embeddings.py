@@ -18,3 +18,9 @@ class EmbeddingService:
             logger.info(f"Loading embedding model '{self.model_name}' (first call only)...")
             self._model = SentenceTransformer(self.model_name)
             logger.info("Embedding model loaded")
+
+    def embed_text(self, text: str) -> List[float]:
+        """Embed a single string (a query or a chunk). Returns a plain list of floats — what Pinecone expects."""
+        self._ensure_loaded()
+        vector: np.ndarray = self._model.encode(text, normalize_embeddings=True)
+        return vector.tolist()
