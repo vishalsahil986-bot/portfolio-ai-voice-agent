@@ -28,4 +28,19 @@ class PineconeVectorStore:
  
         self._pc: Optional[Pinecone] = Pinecone(api_key=self.api_key) if self.is_configured else None
         self._index = None  # lazy — created/connected on first real use, not at import time
+
+    def _ensure_index(self) -> None:
+        if self._index is not None:
+            return
+        if not self.is_configured:
+            raise RuntimeError("PineconeVectorStore has no API key configured")
  
+        if not self._pc.has_index(self.index_name):
+            logger.info(f"Pinecone index '{self.index_name}' doesn't exist yet — creating it (run ingest.py next)")
+            self._pc.create_index(
+                name=self.index_name,
+                dimension=self.dimension,
+                metric="cosine",
+                spec=ServerlessSpec(cloud=self.cloud, region=self.region),
+            )
+        self._index = self._pc.Index(self.index_name) 
