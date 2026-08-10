@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from audio.audio_buffer import FrameBuffer, UtteranceBuffer
 from audio.vad import VoiceActivityDetector
@@ -17,6 +17,7 @@ class Session:
     vad: VoiceActivityDetector = field(init=False)
     frame_buffer: FrameBuffer = field(init=False)
     utterance_buffer: UtteranceBuffer = field(init=False)
+    conversation_history: List[dict] = field(default_factory=list, init=False)
     interrupted: bool = field(default=False, init=False)
 
     def __post_init__(self):
@@ -27,8 +28,6 @@ class Session:
 
 
 class SessionManager:
-    """In-memory session registry. Fine for Phase 1-2; swap for Redis in production (see docs)."""
-
     def __init__(self):
         self._sessions: Dict[str, Session] = {}
 
@@ -46,7 +45,6 @@ class SessionManager:
         if session_id in self._sessions:
             del self._sessions[session_id]
             logger.info(f"Session ended: {session_id}")
-
 
 
 session_manager = SessionManager()
