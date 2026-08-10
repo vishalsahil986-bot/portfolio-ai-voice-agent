@@ -10,3 +10,12 @@ SYSTEM_INSTRUCTION = (
     "gets read aloud by a text-to-speech engine, so it must sound natural "
     "when spoken, not read off a page."
 )
+
+def build_contents(conversation_history: List[dict], new_user_text: str) -> List[types.Content]:
+
+    contents = [
+        types.Content(role=turn["role"], parts=[types.Part(text=turn["text"])])
+        for turn in conversation_history
+    ]
+    contents.append(types.Content(role="user", parts=[types.Part(text=new_user_text)]))
+    return contents
