@@ -27,7 +27,7 @@ class PineconeVectorStore:
             logger.warning("No PINECONE_API_KEY configured — RAG retrieval will be skipped until .env is filled in")
  
         self._pc: Optional[Pinecone] = Pinecone(api_key=self.api_key) if self.is_configured else None
-        self._index = None  # lazy — created/connected on first real use, not at import time
+        self._index = None  
 
     def _ensure_index(self) -> None:
         if self._index is not None:
@@ -44,3 +44,23 @@ class PineconeVectorStore:
                 spec=ServerlessSpec(cloud=self.cloud, region=self.region),
             )
         self._index = self._pc.Index(self.index_name) 
+
+    def upsert_chunks(self, chunks: List[dict]) -> None:
+        """
+        chunks: [{"id": str, "embedding": List[float], "text": str, "source": str}, ...]
+        Used by ingest.py to load document chunks into the index.
+        """
+        if not chunks:
+            return
+        self._ensure_index()
+        vectors = [
+            {
+                "id": chunk["id"],
+                "values": chunk["embedding"],
+                "metadata": {"text": chunk["text"], "source": chunk["source"]},
+            }
+            for chunk in chunks
+        ]
+        self._index.upsert(vectors=vectors)
+        logger.info(f"Upserted {len(vectors)} chunks into Pinecone index '{self.index_name}'")
+ 
