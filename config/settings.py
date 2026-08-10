@@ -68,13 +68,13 @@ class Settings(BaseSettings):
             if key.strip() and voice.strip()
         ]
 
-    # --- Audio ---
+    #  Audio 
     AUDIO_SAMPLE_RATE: int = 16000
     AUDIO_CHUNK_MS: int = 30  
     SILENCE_THRESHOLD_MS: int = 700  
 
 
-    # --- RAG (Pinecone + HuggingFace) ---
+    #  RAG (Pinecone + HuggingFace)
     PINECONE_API_KEY: str = Field(default="")
     PINECONE_INDEX_NAME: str = "voice-agent"
     PINECONE_CLOUD: str = "aws"
