@@ -11,10 +11,10 @@ logger = get_logger(__name__)
 class VoiceActivityDetector:
     def __init__(
         self,
-        aggressiveness: int = 2,
+        aggressiveness: int = 3,
         sample_rate: int = None,
         frame_ms: int = None,
-        speech_confirm_frames: int = 3,
+        speech_confirm_frames: int = 5,
         silence_confirm_ms: int = None,
     ):
         """

@@ -39,6 +39,18 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
 
     text = await asyncio.to_thread(whisper_stt.transcribe, audio)
 
+    if not text or len(text.strip()) < 3:  # too short = noise
+        session.state_machine.transition(CallState.LISTENING)
+        return
+
+    # Filter common Whisper hallucinations on silence
+    JUNK_PHRASES = [". . .", "...", "you", "bye", "thanks", "thank you"]
+    if text.strip().lower() in JUNK_PHRASES:
+        logger.info(f"[{session.session_id}] filtered junk transcription: '{text}'")
+        session.state_machine.transition(CallState.LISTENING)
+        return
+
+
     if not text:
         session.state_machine.transition(CallState.LISTENING)
         return

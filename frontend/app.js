@@ -128,7 +128,14 @@ function handleControlMessage(msg) {
 }
 
 async function startMic() {
-  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,      // removes echo
+      noiseSuppression: true,      // removes fan/background noise ✅
+      autoGainControl: true,       // normalizes volume
+      sampleRate: 16000,
+    }
+  });
 
   // 16000Hz — browser resamples mic input to match VAD/Whisper requirement
   audioContext = new AudioContext({ sampleRate: 16000 });
