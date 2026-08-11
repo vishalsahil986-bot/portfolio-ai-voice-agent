@@ -2,6 +2,7 @@ import asyncio
 import json
 from typing import Optional
 
+from google.genai import types
 from memory.memory_manager import memory_manager
 from config.settings import settings
 from utils.logger import get_logger
@@ -96,10 +97,10 @@ async def _run_summarization(
 
         logger.info(f"[{session_id}] Summarizing exchange with Gemini (low temp)...")
 
+        contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
         raw_summary = await asyncio.to_thread(
-            gemini_service.generate_reply,
-            [], 
-            prompt,
+            gemini_service.generate_reply_from_contents,
+            contents,
         )
 
         if not raw_summary:
