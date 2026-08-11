@@ -10,7 +10,9 @@ let mediaStream = null;
 let processorNode = null;
 let sourceNode = null;
 let isCallActive = false;
-let currentAudio = null;  // track currently playing audio globally
+let currentAudio = null;   // currently playing audio
+let audioQueue = [];       // queue of pending audio blobs
+let isPlaying = false;     // are we currently playing?
 
 function log(text, cls = "system") {
   const line = document.createElement("div");
@@ -30,11 +32,39 @@ function floatTo16BitPCM(float32Array) {
 }
 
 function stopCurrentAudio() {
-  // Stop and discard whatever the agent is currently saying
+  // Stop current audio and clear entire queue
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.src = "";
     currentAudio = null;
+  }
+  audioQueue = [];
+  isPlaying = false;
+}
+
+function playNext() {
+  if (audioQueue.length === 0) {
+    isPlaying = false;
+    return;
+  }
+  isPlaying = true;
+  const arrayBuffer = audioQueue.shift();
+  const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+  const url = URL.createObjectURL(blob);
+  currentAudio = new Audio(url);
+  currentAudio.play().catch((err) => log(`Playback error: ${err.message}`));
+  currentAudio.onended = () => {
+    URL.revokeObjectURL(url);
+    currentAudio = null;
+    playNext();
+  };
+}
+
+function playReplyAudio(arrayBuffer) {
+  // Add to queue — play immediately if nothing is playing
+  audioQueue.push(arrayBuffer);
+  if (!isPlaying) {
+    playNext();
   }
 }
 
@@ -76,6 +106,8 @@ function handleControlMessage(msg) {
       break;
 
     case "stop_audio":
+      // Backend detected barge-in — stop Q1 audio + clear queue immediately
+      // so Q2 answer plays cleanly with no overlap
       stopCurrentAudio();
       break;
 
@@ -88,7 +120,7 @@ function handleControlMessage(msg) {
       break;
 
     case "audio_ack":
-      break; // Phase 1 leftover ack, ignored now
+      break; // Phase 1 leftover, ignored
 
     default:
       log(`Unknown message: ${JSON.stringify(msg)}`);
@@ -98,9 +130,7 @@ function handleControlMessage(msg) {
 async function startMic() {
   mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  // Requesting a 16000Hz context — the browser resamples the mic
-  // input to match, so everything downstream is already at the rate
-  // VAD/Whisper expect.
+  // 16000Hz — browser resamples mic input to match VAD/Whisper requirement
   audioContext = new AudioContext({ sampleRate: 16000 });
   sourceNode = audioContext.createMediaStreamSource(mediaStream);
 
@@ -123,55 +153,11 @@ async function startMic() {
   statusEl.textContent = "Listening...";
 }
 
-let currentAudio = null;
-let audioQueue = [];        // queue of pending audio blobs
-let isPlaying = false;      // are we currently playing?
-
-function stopCurrentAudio() {
-  // Stop current audio
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = "";
-    currentAudio = null;
-  }
-  // Clear the queue — discard all pending answers
-  audioQueue = [];
-  isPlaying = false;
-}
-
-function playReplyAudio(arrayBuffer) {
-  // Add to queue — don't play immediately
-  audioQueue.push(arrayBuffer);
-  // Start playing if nothing is playing right now
-  if (!isPlaying) {
-    playNext();
-  }
-}
-
-function playNext() {
-  if (audioQueue.length === 0) {
-    isPlaying = false;
-    return;
-  }
-  isPlaying = true;
-  const arrayBuffer = audioQueue.shift();  // take first item
-  const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
-  const url = URL.createObjectURL(blob);
-  currentAudio = new Audio(url);
-  currentAudio.play().catch((err) => log(`Playback error: ${err.message}`));
-  currentAudio.onended = () => {
-    URL.revokeObjectURL(url);
-    currentAudio = null;
-    playNext();  // play next in queue when this finishes
-  };
-}
-
-
-
 function stopCall() {
   isCallActive = false;
 
-  audioQueue = [];     
+  // Stop audio + clear queue before disconnecting
+  audioQueue = [];
   isPlaying = false;
   stopCurrentAudio();
 
@@ -195,4 +181,3 @@ callBtn.addEventListener("click", () => {
     startCall();
   }
 });
-
