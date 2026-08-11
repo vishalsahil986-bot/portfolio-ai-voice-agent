@@ -170,6 +170,9 @@ function playNext() {
 
 function stopCall() {
   isCallActive = false;
+
+  audioQueue = [];     
+  isPlaying = false;
   stopCurrentAudio();
 
   if (processorNode) { processorNode.disconnect(); processorNode = null; }
