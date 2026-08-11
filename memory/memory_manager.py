@@ -49,3 +49,17 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"[{session_id}] Failed to get session: {e}")
             return None
+
+    async def _expire_session(self, session_id: str) -> None:
+        """Wipe summaries and reset count — keeps the document for customer data."""
+        try:
+            await self._db.sessions.update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "summaries": [],
+                    "message_count": 0,
+                    "last_active": datetime.now(timezone.utc),
+                }},
+            )
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to expire session: {e}")
