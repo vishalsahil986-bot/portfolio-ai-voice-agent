@@ -32,4 +32,24 @@ def _format_summaries(summaries: List[dict]) -> str:
             )
         )
     return "\n".join(lines)
+
+async def build_gemini_context(
+    session_id: str,
+    conversation_history: List[dict],
+    new_user_text: str,
+    retrieved_context: str = "",
+    message_count: int = 0,
+) -> List[types.Content]:
+    """
+    Assemble the full contents list for a Gemini call.
+ 
+    session_id: used to load summaries from MongoDB
+    conversation_history: in-RAM recent turns from Session
+    new_user_text: what the user just said (transcribed by Whisper)
+    retrieved_context: RAG chunks from retriever.retrieve() — "" if none
+    message_count: current message count — drives which context mode to use
+ 
+    Returns List[types.Content] ready to pass as `contents` to Gemini.
+    """
+    contents: List[types.Content] = []
  
