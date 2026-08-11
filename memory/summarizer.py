@@ -21,3 +21,25 @@ Return exactly this structure:
   "bot_response": "what the assistant replied or did (one sentence)",
   "context": "key facts to remember for the rest of the call (one sentence)"
 }}"""
+
+def _parse_summary(raw: str) -> Optional[dict]:
+    """
+    Safely parse Gemini's JSON response.
+    Strips markdown fences if Gemini adds them despite the prompt.
+    Returns None if parsing fails — caller handles the fallback.
+    """
+    try:
+        clean = raw.strip()
+        if clean.startswith("```"):
+
+            lines = clean.split("\n")
+            clean = "\n".join(lines[1:-1])
+        parsed = json.loads(clean)
+
+        if all(k in parsed for k in ("user_intent", "bot_response", "context")):
+            return parsed
+        logger.warning("Summary JSON missing required fields")
+        return None
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse summary JSON: {e} — raw: {raw[:200]}")
+        return None
