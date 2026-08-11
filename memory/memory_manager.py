@@ -101,4 +101,18 @@ class MemoryManager:
             return result["message_count"] if result else 0
         except Exception as e:
             logger.error(f"[{session_id}] Failed to increment message count: {e}")
+            return 0
+
+    async def get_message_count(self, session_id: str) -> int:
+        """Current message count for this session."""
+        if not self.is_configured:
+            return 0
+        try:
+            doc = await self._db.sessions.find_one(
+                {"session_id": session_id},
+                {"message_count": 1}
+            )
+            return doc["message_count"] if doc else 0
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to get message count: {e}")
             return 0   
