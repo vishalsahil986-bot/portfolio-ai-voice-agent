@@ -38,16 +38,16 @@ ai_voice_agent/
 │   ├── __init__.py             ✅
 │   └── logger.py              ✅
 │
-├── llm/                                          ⏳ PHASE 3
+├── llm/                                          ✅ PHASE 3
 │   ├── __init__.py
-│   ├── gemini_service.py      ⏳ Gemini calls, rotates GEMINI_API_KEY1-4
-│   └── prompt_builder.py      ⏳ builds system prompt + conversation turn
+│   ├── gemini_service.py      ✅ Gemini calls, rotates GEMINI_API_KEY1-4
+│   └── prompt_builder.py      ✅ builds system prompt + conversation turn
 │
-├── rag/                                          ⏳ PHASE 4
+├── rag/                                          ✅ PHASE 4
 │   ├── __init__.py
-│   ├── vector_store.py        ⏳ embeddings index (FAISS/Chroma)
-│   ├── ingest.py               ⏳ chunk + embed source documents
-│   └── retriever.py            ⏳ pulls relevant chunks into the prompt
+│   ├── vector_store.py        ✅ embeddings index (FAISS/Chroma)
+│   ├── ingest.py               ✅✅ chunk + embed source documents
+│   └── retriever.py            ✅ pulls relevant chunks into the prompt
 │
 ├── knowledge_base/                               ⏳ PHASE 4
 │   └── (your source docs go here — PDFs, txt, etc.)
