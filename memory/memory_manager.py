@@ -39,9 +39,10 @@ class MemoryManager:
             if not doc:
                 return None
 
-            # Check expiry
             last_active = doc.get("last_active")
             if last_active:
+                if last_active.tzinfo is None:
+                    last_active = last_active.replace(tzinfo=timezone.utc)
                 expiry = last_active + timedelta(hours=settings.SESSION_EXPIRY_HOURS)
                 if datetime.now(timezone.utc) > expiry:
                     logger.info(f"[{session_id}] Session expired — clearing summaries")
