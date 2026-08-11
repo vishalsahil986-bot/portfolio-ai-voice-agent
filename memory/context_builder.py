@@ -58,4 +58,17 @@ async def build_gemini_context(
         logger.info(f"[{session_id}] Message 1 — sending direct, no history")
         contents.append(_make_user_turn(new_user_text, retrieved_context))
         return contents
+
+    # ── Message 2: include raw first exchange ────────────────────────
+    if message_count == 2:
+        logger.info(f"[{session_id}] Message 2 — including raw first exchange")
+        for turn in conversation_history:
+            contents.append(
+                types.Content(
+                    role=turn["role"],
+                    parts=[types.Part(text=turn["text"])],
+                )
+            )
+        contents.append(_make_user_turn(new_user_text, retrieved_context))
+        return contents
  
