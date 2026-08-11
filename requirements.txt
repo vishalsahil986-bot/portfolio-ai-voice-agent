@@ -19,7 +19,8 @@ google-genai
 
 # Phase 4 (RAG — Pinecone):
 pinecone        
-sentence-transformers   
+sentence-transformers
+pymupdf   
 
 # Phase 5 (Memory — MongoDB):
 pymongo            
