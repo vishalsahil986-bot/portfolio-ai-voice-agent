@@ -76,8 +76,6 @@ function handleControlMessage(msg) {
       break;
 
     case "stop_audio":
-      // Backend detected barge-in (user spoke while agent was speaking)
-      // Stop Q1 audio immediately so Q2 answer can play cleanly
       stopCurrentAudio();
       break;
 
@@ -125,11 +123,38 @@ async function startMic() {
   statusEl.textContent = "Listening...";
 }
 
-function playReplyAudio(arrayBuffer) {
-  // Stop any currently playing audio before starting new one
-  // This handles the case where Q2 answer arrives while Q1 is still playing
-  stopCurrentAudio();
+let currentAudio = null;
+let audioQueue = [];        // queue of pending audio blobs
+let isPlaying = false;      // are we currently playing?
 
+function stopCurrentAudio() {
+  // Stop current audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = "";
+    currentAudio = null;
+  }
+  // Clear the queue — discard all pending answers
+  audioQueue = [];
+  isPlaying = false;
+}
+
+function playReplyAudio(arrayBuffer) {
+  // Add to queue — don't play immediately
+  audioQueue.push(arrayBuffer);
+  // Start playing if nothing is playing right now
+  if (!isPlaying) {
+    playNext();
+  }
+}
+
+function playNext() {
+  if (audioQueue.length === 0) {
+    isPlaying = false;
+    return;
+  }
+  isPlaying = true;
+  const arrayBuffer = audioQueue.shift();  // take first item
   const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
   const url = URL.createObjectURL(blob);
   currentAudio = new Audio(url);
@@ -137,8 +162,11 @@ function playReplyAudio(arrayBuffer) {
   currentAudio.onended = () => {
     URL.revokeObjectURL(url);
     currentAudio = null;
+    playNext();  // play next in queue when this finishes
   };
 }
+
+
 
 function stopCall() {
   isCallActive = false;
@@ -164,3 +192,4 @@ callBtn.addEventListener("click", () => {
     startCall();
   }
 });
+
