@@ -61,11 +61,9 @@ function playNext() {
 }
 
 function playReplyAudio(arrayBuffer) {
-  // Add to queue — play immediately if nothing is playing
+  stopCurrentAudio();
   audioQueue.push(arrayBuffer);
-  if (!isPlaying) {
-    playNext();
-  }
+  playNext();
 }
 
 async function startCall() {

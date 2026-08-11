@@ -19,11 +19,11 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-async def _handle_speech_started(session: Session) -> None:
+async def _handle_speech_started(session: Session, websocket: WebSocket) -> None:
     if session.state_machine.state == CallState.SPEAKING:
-
         session.state_machine.interrupt()
         session.interrupted = True
+        await websocket.send_json({"type": "stop_audio"})  # ← THIS sends stop signal
     session.utterance_buffer.reset()
 
 
@@ -150,7 +150,7 @@ async def call_websocket(websocket: WebSocket):
                     event = session.vad.process_frame(frame)
 
                     if event == "speech_started":
-                        await _handle_speech_started(session)
+                        await _handle_speech_started(session, websocket)
                     elif event == "speech_ended":
                         await _handle_speech_ended(session, websocket)
 
