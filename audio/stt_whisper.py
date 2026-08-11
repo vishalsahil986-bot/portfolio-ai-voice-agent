@@ -37,7 +37,13 @@ class WhisperSTT:
         self._ensure_loaded()
         audio = self.pcm_bytes_to_float32(pcm_bytes)
  
-        segments, _info = self._model.transcribe(audio, language=language)
+        segments, _info = self._model.transcribe(
+            audio,
+            language=language,
+            beam_size=5,          
+            vad_filter=True,      
+            vad_parameters=dict(min_silence_duration_ms=500),
+        )
         text = " ".join(segment.text for segment in segments).strip()
         logger.info(f"Whisper transcribed: '{text}'")
         return text

@@ -37,7 +37,7 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
     session.interrupted = False
     session.state_machine.transition(CallState.THINKING)
 
-    text = await asyncio.to_thread(whisper_stt.transcribe, audio)
+    text = await asyncio.to_thread(whisper_stt.transcribe, audio, language="en")
 
     if not text or len(text.strip()) < 3:  # too short = noise
         session.state_machine.transition(CallState.LISTENING)
