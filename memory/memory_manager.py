@@ -63,3 +63,21 @@ class MemoryManager:
             )
         except Exception as e:
             logger.error(f"[{session_id}] Failed to expire session: {e}")
+ 
+    async def _touch_session(self, session_id: str) -> None:
+        """Update last_active timestamp — called on every turn."""
+        try:
+            await self._db.sessions.update_one(
+                {"session_id": session_id},
+                {
+                    "$set": {"last_active": datetime.now(timezone.utc)},
+                    "$setOnInsert": {
+                        "session_id": session_id,
+                        "summaries": [],
+                        "message_count": 0,
+                    },
+                },
+                upsert=True,
+            )
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to touch session: {e}")
