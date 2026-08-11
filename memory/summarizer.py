@@ -43,3 +43,33 @@ def _parse_summary(raw: str) -> Optional[dict]:
     except json.JSONDecodeError as e:
         logger.warning(f"Failed to parse summary JSON: {e} — raw: {raw[:200]}")
         return None
+
+async def summarize_exchange_in_background(
+    session_id: str,
+    user_text: str,
+    bot_text: str,
+    message_count: int,
+) -> None:
+    """
+    Decide whether to summarize and fire as background task.
+ 
+    message_count: the CURRENT count after this turn.
+    Summarization starts from message 3 onwards — first two messages
+    are kept raw (first exchange stays in conversation_history).
+ 
+    Called from websocket_routes.py after every completed turn.
+    """
+    if not memory_manager.is_configured:
+        return
+ 
+    if message_count < 3:
+        logger.info(f"[{session_id}] Message {message_count} — no summarization yet")
+        return
+ 
+    logger.info(
+        f"[{session_id}] Message {message_count} — "
+        f"firing background summarization of previous exchange"
+    )
+    asyncio.create_task(
+        _run_summarization(session_id, user_text, bot_text)
+    )
