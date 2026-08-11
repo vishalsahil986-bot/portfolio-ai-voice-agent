@@ -28,13 +28,21 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
  
 def load_documents() -> List[dict]:
     """Reads every .txt/.md file in knowledge_base/. Returns [{"source": filename, "text": full_text}, ...]."""
-    paths = glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.txt")) + glob.glob(
-        os.path.join(KNOWLEDGE_BASE_DIR, "*.md")
+    paths = (
+        glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.txt")) +
+        glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.md")) +
+        glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.pdf"))
     )
     documents = []
     for path in paths:
-        with open(path, "r", encoding="utf-8") as f:
-            documents.append({"source": os.path.basename(path), "text": f.read()})
+        if path.endswith(".pdf"):
+            import fitz  # PyMuPDF
+            doc = fitz.open(path)
+            text = "\n".join(page.get_text() for page in doc)
+        else:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+        documents.append({"source": os.path.basename(path), "text": text})
     return documents
  
 def run_ingestion() -> None:
