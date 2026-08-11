@@ -71,4 +71,46 @@ async def build_gemini_context(
             )
         contents.append(_make_user_turn(new_user_text, retrieved_context))
         return contents
+
+    # ── Message 3+: summaries from MongoDB + current turn ────────────
+    summaries = await memory_manager.get_summaries(session_id)
+ 
+    if summaries:
+        formatted = _format_summaries(summaries)
+        memory_block = _MEMORY_BLOCK_TEMPLATE.format(summaries=formatted)
+ 
+        # Inject as user/model pair so Gemini sees valid alternation
+        contents.append(
+            types.Content(
+                role="user",
+                parts=[types.Part(text=memory_block)],
+            )
+        )
+        contents.append(
+            types.Content(
+                role="model",
+                parts=[types.Part(text="Got it, I have the conversation context.")],
+            )
+        )
+        logger.info(
+            f"[{session_id}] Injected {len(summaries)} summaries into context "
+            f"(message {message_count})"
+        )
+    else:
+        # Summaries not ready yet (background task still running) —
+        # fall back to raw history for this turn
+        logger.info(
+            f"[{session_id}] No summaries yet — using raw history as fallback"
+        )
+        for turn in conversation_history[-4:]:  # last 2 exchanges max
+            contents.append(
+                types.Content(
+                    role=turn["role"],
+                    parts=[types.Part(text=turn["text"])],
+                )
+            )
+ 
+    # Current user turn (with optional RAG context)
+    contents.append(_make_user_turn(new_user_text, retrieved_context))
+    return contents
  
