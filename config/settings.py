@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         return [k for k in keys if k.strip()]
 
     #  STT (Whisper, local/open-source) 
-    WHISPER_MODEL_SIZE: str = "base"  # tiny | base | small | medium | large
+    WHISPER_MODEL_SIZE: str = "Systran/faster-distil-whisper-medium.en"  # tiny | base | small | medium | large
     WHISPER_DEVICE: str = "cpu"  # cpu | cuda
 
     #  TTS (ElevenLabs) 

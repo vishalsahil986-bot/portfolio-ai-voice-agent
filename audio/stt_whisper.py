@@ -16,7 +16,12 @@ class WhisperSTT:
         if self._model is None:
             logger.info(f"Loading faster-whisper model '{self.model_size}' on {self.device} (first call only)...")
             compute_type = "float16" if self.device == "cuda" else "int8"
-            self._model = WhisperModel(self.model_size, device=self.device, compute_type=compute_type)
+            # Support both standard and distil models
+            self._model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=compute_type,
+            )
             logger.info("faster-whisper model loaded")
 
     @staticmethod
