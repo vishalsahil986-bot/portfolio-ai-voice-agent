@@ -81,3 +81,24 @@ class MemoryManager:
             )
         except Exception as e:
             logger.error(f"[{session_id}] Failed to touch session: {e}")
+
+    #  Message count 
+ 
+    async def increment_message_count(self, session_id: str) -> int:
+        """
+        Increment message count by 1 and return the NEW count.
+        Called after every user turn — count drives summarization logic.
+        """
+        if not self.is_configured:
+            return 0
+        try:
+            await self._touch_session(session_id)
+            result = await self._db.sessions.find_one_and_update(
+                {"session_id": session_id},
+                {"$inc": {"message_count": 1}},
+                return_document=True,
+            )
+            return result["message_count"] if result else 0
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to increment message count: {e}")
+            return 0   
