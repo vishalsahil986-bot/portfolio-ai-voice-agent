@@ -75,13 +75,18 @@ class Settings(BaseSettings):
 
 
     #  RAG (Pinecone + HuggingFace)
-    PINECONE_API_KEY: str = Field(default="")
+    PINECONE_API_KEY: str = ""
     PINECONE_INDEX_NAME: str = "voice-agent"
     PINECONE_CLOUD: str = "aws"
     PINECONE_REGION: str = "us-east-1"
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIMENSION: int = 384
     RAG_TOP_K: int = 3
+
+    # Memory (MongoDB)
+    MONGODB_URI: str = ""
+    MONGODB_DB_NAME: str = "ai_voice_agent"
+    SESSION_EXPIRY_HOURS: int = 2
 
 
 @lru_cache
