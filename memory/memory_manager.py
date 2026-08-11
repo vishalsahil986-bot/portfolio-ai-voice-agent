@@ -24,3 +24,16 @@ class MemoryManager:
         else:
             self._client = motor.motor_asyncio.AsyncIOMotorClient(self.uri)
             self._db = self._client[self.db_name]
+
+    #  Session CRUD                                                        
+ 
+    async def get_session(self, session_id: str) -> Optional[dict]:
+        """Load the session document. Returns None if not found or expired."""
+        if not self.is_configured:
+            return None
+        try:
+            doc = await self._db.sessions.find_one({"session_id": session_id})
+            if not doc:
+                return None
+
+ 
