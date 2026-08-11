@@ -1,19 +1,20 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
- 
+
 import motor.motor_asyncio
- 
+
 from config.settings import settings
 from utils.logger import get_logger
- 
+
 logger = get_logger(__name__)
+
 
 class MemoryManager:
     def __init__(self, uri: str = None, db_name: str = None):
         self.uri = uri or settings.MONGODB_URI
         self.db_name = db_name or settings.MONGODB_DB_NAME
         self.is_configured = bool(self.uri)
- 
+
         if not self.is_configured:
             logger.warning(
                 "No MONGODB_URI configured — memory will not be persisted. "
@@ -24,9 +25,11 @@ class MemoryManager:
         else:
             self._client = motor.motor_asyncio.AsyncIOMotorClient(self.uri)
             self._db = self._client[self.db_name]
+
 
     #  Session CRUD                                                        
- 
+
+
     async def get_session(self, session_id: str) -> Optional[dict]:
         """Load the session document. Returns None if not found or expired."""
         if not self.is_configured:
@@ -35,7 +38,7 @@ class MemoryManager:
             doc = await self._db.sessions.find_one({"session_id": session_id})
             if not doc:
                 return None
- 
+
             # Check expiry
             last_active = doc.get("last_active")
             if last_active:
@@ -44,7 +47,7 @@ class MemoryManager:
                     logger.info(f"[{session_id}] Session expired — clearing summaries")
                     await self._expire_session(session_id)
                     return None
- 
+
             return doc
         except Exception as e:
             logger.error(f"[{session_id}] Failed to get session: {e}")
@@ -63,7 +66,7 @@ class MemoryManager:
             )
         except Exception as e:
             logger.error(f"[{session_id}] Failed to expire session: {e}")
- 
+
     async def _touch_session(self, session_id: str) -> None:
         """Update last_active timestamp — called on every turn."""
         try:
@@ -82,8 +85,10 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"[{session_id}] Failed to touch session: {e}")
 
-    #  Message count 
- 
+
+    #  Message count                                                       
+
+
     async def increment_message_count(self, session_id: str) -> int:
         """
         Increment message count by 1 and return the NEW count.
@@ -115,158 +120,11 @@ class MemoryManager:
             return doc["message_count"] if doc else 0
         except Exception as e:
             logger.error(f"[{session_id}] Failed to get message count: {e}")
-            return 0  
-
-
-Memory manager · PY
-"""
-Long-term memory via MongoDB.
- 
-Each session document looks like this:
-{
-  "session_id": "abc-123",
-  "summaries": [
-    {"user_intent": "...", "bot_response": "...", "context": "..."},
-    {"user_intent": "...", "bot_response": "...", "context": "..."},
-  ],
-  "message_count": 4,
-  "last_active": "2026-08-10T12:00:00Z"
-}
- 
-Expiry: sessions inactive for SESSION_EXPIRY_HOURS are automatically
-wiped — summaries cleared, count reset. Customer identity (name, phone,
-last order) lives in a separate customers collection and is NEVER wiped.
- 
-motor (async MongoDB driver) is used throughout so no DB call ever
-blocks the FastAPI event loop.
-"""
- 
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
- 
-import motor.motor_asyncio
- 
-from config.settings import settings
-from utils.logger import get_logger
- 
-logger = get_logger(__name__)
- 
- 
-class MemoryManager:
-    def __init__(self, uri: str = None, db_name: str = None):
-        self.uri = uri or settings.MONGODB_URI
-        self.db_name = db_name or settings.MONGODB_DB_NAME
-        self.is_configured = bool(self.uri)
- 
-        if not self.is_configured:
-            logger.warning(
-                "No MONGODB_URI configured — memory will not be persisted. "
-                "Set MONGODB_URI in .env to enable long-term memory."
-            )
-            self._client = None
-            self._db = None
-        else:
-            self._client = motor.motor_asyncio.AsyncIOMotorClient(self.uri)
-            self._db = self._client[self.db_name]
- 
-    # ------------------------------------------------------------------ #
-    #  Session CRUD                                                        #
-    # ------------------------------------------------------------------ #
- 
-    async def get_session(self, session_id: str) -> Optional[dict]:
-        """Load the session document. Returns None if not found or expired."""
-        if not self.is_configured:
-            return None
-        try:
-            doc = await self._db.sessions.find_one({"session_id": session_id})
-            if not doc:
-                return None
- 
-            # Check expiry
-            last_active = doc.get("last_active")
-            if last_active:
-                expiry = last_active + timedelta(hours=settings.SESSION_EXPIRY_HOURS)
-                if datetime.now(timezone.utc) > expiry:
-                    logger.info(f"[{session_id}] Session expired — clearing summaries")
-                    await self._expire_session(session_id)
-                    return None
- 
-            return doc
-        except Exception as e:
-            logger.error(f"[{session_id}] Failed to get session: {e}")
-            return None
- 
-    async def _expire_session(self, session_id: str) -> None:
-        """Wipe summaries and reset count — keeps the document for customer data."""
-        try:
-            await self._db.sessions.update_one(
-                {"session_id": session_id},
-                {"$set": {
-                    "summaries": [],
-                    "message_count": 0,
-                    "last_active": datetime.now(timezone.utc),
-                }},
-            )
-        except Exception as e:
-            logger.error(f"[{session_id}] Failed to expire session: {e}")
- 
-    async def _touch_session(self, session_id: str) -> None:
-        """Update last_active timestamp — called on every turn."""
-        try:
-            await self._db.sessions.update_one(
-                {"session_id": session_id},
-                {
-                    "$set": {"last_active": datetime.now(timezone.utc)},
-                    "$setOnInsert": {
-                        "session_id": session_id,
-                        "summaries": [],
-                        "message_count": 0,
-                    },
-                },
-                upsert=True,
-            )
-        except Exception as e:
-            logger.error(f"[{session_id}] Failed to touch session: {e}")
- 
-    # ------------------------------------------------------------------ #
-    #  Message count                                                       #
-    # ------------------------------------------------------------------ #
- 
-    async def increment_message_count(self, session_id: str) -> int:
-        """
-        Increment message count by 1 and return the NEW count.
-        Called after every user turn — count drives summarization logic.
-        """
-        if not self.is_configured:
-            return 0
-        try:
-            await self._touch_session(session_id)
-            result = await self._db.sessions.find_one_and_update(
-                {"session_id": session_id},
-                {"$inc": {"message_count": 1}},
-                return_document=True,
-            )
-            return result["message_count"] if result else 0
-        except Exception as e:
-            logger.error(f"[{session_id}] Failed to increment message count: {e}")
-            return 0
- 
-    async def get_message_count(self, session_id: str) -> int:
-        """Current message count for this session."""
-        if not self.is_configured:
-            return 0
-        try:
-            doc = await self._db.sessions.find_one(
-                {"session_id": session_id},
-                {"message_count": 1}
-            )
-            return doc["message_count"] if doc else 0
-        except Exception as e:
-            logger.error(f"[{session_id}] Failed to get message count: {e}")
             return 0
 
-    #  Summaries
- 
+        
+    #  Summaries 
+                                                              
     async def append_summary(self, session_id: str, summary: dict) -> None:
         """
         Append one exchange summary to the session's summaries array.
@@ -300,6 +158,5 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"[{session_id}] Failed to get summaries: {e}")
             return []
- 
 
 memory_manager = MemoryManager()
