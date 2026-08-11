@@ -52,4 +52,10 @@ async def build_gemini_context(
     Returns List[types.Content] ready to pass as `contents` to Gemini.
     """
     contents: List[types.Content] = []
+
+    #  Message 1: no history yet
+    if message_count <= 1:
+        logger.info(f"[{session_id}] Message 1 — sending direct, no history")
+        contents.append(_make_user_turn(new_user_text, retrieved_context))
+        return contents
  
