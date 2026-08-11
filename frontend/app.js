@@ -10,6 +10,7 @@ let mediaStream = null;
 let processorNode = null;
 let sourceNode = null;
 let isCallActive = false;
+let currentAudio = null;  // track currently playing audio globally
 
 function log(text, cls = "system") {
   const line = document.createElement("div");
@@ -26,6 +27,15 @@ function floatTo16BitPCM(float32Array) {
     out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   return out;
+}
+
+function stopCurrentAudio() {
+  // Stop and discard whatever the agent is currently saying
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = "";
+    currentAudio = null;
+  }
 }
 
 async function startCall() {
@@ -64,14 +74,24 @@ function handleControlMessage(msg) {
       statusEl.textContent = `In call (session ${msg.session_id.slice(0, 8)}...)`;
       log("Call connected", "system");
       break;
+
+    case "stop_audio":
+      // Backend detected barge-in (user spoke while agent was speaking)
+      // Stop Q1 audio immediately so Q2 answer can play cleanly
+      stopCurrentAudio();
+      break;
+
     case "transcript":
       log(`You: ${msg.text}`, "user");
       break;
+
     case "reply_text":
       log(`Agent: ${msg.text}`, "agent");
       break;
+
     case "audio_ack":
-      break; // Phase 1 leftover ack, ignored now that the real pipeline is wired in
+      break; // Phase 1 leftover ack, ignored now
+
     default:
       log(`Unknown message: ${JSON.stringify(msg)}`);
   }
@@ -82,8 +102,7 @@ async function startMic() {
 
   // Requesting a 16000Hz context — the browser resamples the mic
   // input to match, so everything downstream is already at the rate
-  // VAD/Whisper expect. (Actual hardware capture rate varies; this is
-  // the resampled rate delivered to our processor node.)
+  // VAD/Whisper expect.
   audioContext = new AudioContext({ sampleRate: 16000 });
   sourceNode = audioContext.createMediaStreamSource(mediaStream);
 
@@ -91,11 +110,10 @@ async function startMic() {
   processorNode = audioContext.createScriptProcessor(bufferSize, 1, 1);
 
   processorNode.onaudioprocess = (event) => {
-      if (!isCallActive || !ws || ws.readyState !== WebSocket.OPEN) return;
-      stopCurrentAudio();  // ← add this line
-      const float32 = event.inputBuffer.getChannelData(0);
-      const pcm16 = floatTo16BitPCM(float32);
-      ws.send(pcm16.buffer);
+    if (!isCallActive || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const float32 = event.inputBuffer.getChannelData(0);
+    const pcm16 = floatTo16BitPCM(float32);
+    ws.send(pcm16.buffer);
   };
 
   sourceNode.connect(processorNode);
@@ -107,37 +125,24 @@ async function startMic() {
   statusEl.textContent = "Listening...";
 }
 
-let currentAudio = null;  // track playing audio globally
-
 function playReplyAudio(arrayBuffer) {
-    // Stop any currently playing audio immediately
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.src = "";
-        currentAudio = null;
-    }
+  // Stop any currently playing audio before starting new one
+  // This handles the case where Q2 answer arrives while Q1 is still playing
+  stopCurrentAudio();
 
-    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
-    currentAudio = new Audio(url);
-    currentAudio.play().catch((err) => log(`Playback error: ${err.message}`));
-    currentAudio.onended = () => {
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-    };
-}
-
-// Stop audio when user starts speaking
-function stopCurrentAudio() {
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.src = "";
-        currentAudio = null;
-    }
+  const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+  const url = URL.createObjectURL(blob);
+  currentAudio = new Audio(url);
+  currentAudio.play().catch((err) => log(`Playback error: ${err.message}`));
+  currentAudio.onended = () => {
+    URL.revokeObjectURL(url);
+    currentAudio = null;
+  };
 }
 
 function stopCall() {
   isCallActive = false;
+  stopCurrentAudio();
 
   if (processorNode) { processorNode.disconnect(); processorNode = null; }
   if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
