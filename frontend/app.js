@@ -91,10 +91,11 @@ async function startMic() {
   processorNode = audioContext.createScriptProcessor(bufferSize, 1, 1);
 
   processorNode.onaudioprocess = (event) => {
-    if (!isCallActive || !ws || ws.readyState !== WebSocket.OPEN) return;
-    const float32 = event.inputBuffer.getChannelData(0);
-    const pcm16 = floatTo16BitPCM(float32);
-    ws.send(pcm16.buffer);
+      if (!isCallActive || !ws || ws.readyState !== WebSocket.OPEN) return;
+      stopCurrentAudio();  // ← add this line
+      const float32 = event.inputBuffer.getChannelData(0);
+      const pcm16 = floatTo16BitPCM(float32);
+      ws.send(pcm16.buffer);
   };
 
   sourceNode.connect(processorNode);
@@ -106,12 +107,33 @@ async function startMic() {
   statusEl.textContent = "Listening...";
 }
 
+let currentAudio = null;  // track playing audio globally
+
 function playReplyAudio(arrayBuffer) {
-  const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  audio.play().catch((err) => log(`Playback error: ${err.message}`));
-  audio.onended = () => URL.revokeObjectURL(url);
+    // Stop any currently playing audio immediately
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = "";
+        currentAudio = null;
+    }
+
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.play().catch((err) => log(`Playback error: ${err.message}`));
+    currentAudio.onended = () => {
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+    };
+}
+
+// Stop audio when user starts speaking
+function stopCurrentAudio() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = "";
+        currentAudio = null;
+    }
 }
 
 function stopCall() {
