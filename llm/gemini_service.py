@@ -5,7 +5,7 @@ from google.genai import types
 from google.genai.errors import APIError
  
 from config.settings import settings
-from llm.prompt_builder import SYSTEM_INSTRUCTION, build_contents
+from llm.prompt_builder import SYSTEM_INSTRUCTION
 from utils.logger import get_logger
  
 logger = get_logger(__name__)
@@ -84,6 +84,40 @@ class GeminiService:
         raise AllGeminiKeysExhausted(
             f"All {len(self.api_keys)} Gemini keys failed with quota/auth errors"
         )
- 
+
+    def generate_reply_from_contents(self, contents: list) -> str:
+        """
+        Same as generate_reply() but accepts pre-built contents list
+        from memory/context_builder.py — used by Phase 5 websocket_routes.py.
+        """
+        if not self._client:
+            raise RuntimeError("GeminiService has no API keys configured")
+
+        keys_tried = 0
+        while keys_tried < len(self.api_keys):
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION
+                    ),
+                )
+                text = (response.text or "").strip()
+                logger.info(f"Gemini replied: '{text}'")
+                return text
+
+            except APIError as e:
+                keys_tried += 1
+                if self._is_quota_or_auth_error(e) and self._rotate_to_next_key():
+                    continue
+                if keys_tried >= len(self.api_keys):
+                    break
+                raise
+
+        raise AllGeminiKeysExhausted(
+            f"All {len(self.api_keys)} Gemini keys failed with quota/auth errors"
+        )
+    
 
 gemini_service = GeminiService()
