@@ -286,3 +286,20 @@ class MemoryManager:
             logger.info(f"[{session_id}] Summary appended to MongoDB")
         except Exception as e:
             logger.error(f"[{session_id}] Failed to append summary: {e}")
+
+    async def get_summaries(self, session_id: str) -> List[dict]:
+        """
+        Load all summaries for this session, in order.
+        Returns [{"user_intent": str, "bot_response": str, "context": str}, ...]
+        """
+        if not self.is_configured:
+            return []
+        try:
+            doc = await self.get_session(session_id)
+            return doc.get("summaries", []) if doc else []
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to get summaries: {e}")
+            return []
+ 
+
+memory_manager = MemoryManager()
