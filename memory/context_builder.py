@@ -18,4 +18,18 @@ _SUMMARY_ITEM_TEMPLATE = (
     "Bot replied: {bot_response} | "
     "Context: {context}"
 )
+
+def _format_summaries(summaries: List[dict]) -> str:
+    """Format structured summary dicts into a compact readable block."""
+    lines = []
+    for i, s in enumerate(summaries, 1):
+        lines.append(
+            f"Exchange {i}: " +
+            _SUMMARY_ITEM_TEMPLATE.format(
+                user_intent=s.get("user_intent", ""),
+                bot_response=s.get("bot_response", ""),
+                context=s.get("context", ""),
+            )
+        )
+    return "\n".join(lines)
  
