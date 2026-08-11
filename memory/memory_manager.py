@@ -35,5 +35,17 @@ class MemoryManager:
             doc = await self._db.sessions.find_one({"session_id": session_id})
             if not doc:
                 return None
-
  
+            # Check expiry
+            last_active = doc.get("last_active")
+            if last_active:
+                expiry = last_active + timedelta(hours=settings.SESSION_EXPIRY_HOURS)
+                if datetime.now(timezone.utc) > expiry:
+                    logger.info(f"[{session_id}] Session expired — clearing summaries")
+                    await self._expire_session(session_id)
+                    return None
+ 
+            return doc
+        except Exception as e:
+            logger.error(f"[{session_id}] Failed to get session: {e}")
+            return None
