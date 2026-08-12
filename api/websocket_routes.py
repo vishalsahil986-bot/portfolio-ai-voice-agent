@@ -136,6 +136,10 @@ async def call_websocket(websocket: WebSocket):
         "session_id": session.session_id,
     })
 
+    await websocket.send_json({
+        "type": "play_greeting"  # browser plays pre-recorded audio
+    })
+
     try:
         while True:
             message = await websocket.receive()
