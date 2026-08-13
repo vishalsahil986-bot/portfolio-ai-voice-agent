@@ -35,11 +35,15 @@ async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
         return
 
     session.interrupted = False
+    #session.state_machine.transition(CallState.THINKING)
+    if session.state_machine.state != CallState.LISTENING:
+        logger.info(f"[{session.session_id}] skipping — still processing previous turn")
+        return  # another task is already processing, skip this one
     session.state_machine.transition(CallState.THINKING)
 
     text = await asyncio.to_thread(whisper_stt.transcribe, audio, language="en")
 
-    if not text or len(text.strip()) < 3:  # too short = noise
+    if not text or len(text.strip()) < 4:  # too short = noise
         session.state_machine.transition(CallState.LISTENING)
         return
 
@@ -136,6 +140,11 @@ async def call_websocket(websocket: WebSocket):
         "session_id": session.session_id,
     })
 
+    # Send greeting signal immediately ✅
+    await websocket.send_json({"type": "play_greeting"})
+
+
+
     await websocket.send_json({
         "type": "play_greeting"  # browser plays pre-recorded audio
     })
@@ -156,7 +165,7 @@ async def call_websocket(websocket: WebSocket):
                     if event == "speech_started":
                         await _handle_speech_started(session, websocket)
                     elif event == "speech_ended":
-                        await _handle_speech_ended(session, websocket)
+                        asyncio.create_task(_handle_speech_ended(session, websocket))
 
                     if session.vad.is_speaking:
                         session.utterance_buffer.add(frame)

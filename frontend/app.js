@@ -9,9 +9,9 @@ let mediaStream = null;
 let processorNode = null;
 let sourceNode = null;
 let isCallActive = false;
-let currentAudio = null; // currently playing audio
-let audioQueue = [];     // queue of pending audio blobs
-let isPlaying = false;    // are we currently playing?
+let currentAudio = null;
+let audioQueue = [];
+let isPlaying = false;
 
 function log(text, cls = "system") {
   const line = document.createElement("div");
@@ -31,7 +31,6 @@ function floatTo16BitPCM(float32Array) {
 }
 
 function stopCurrentAudio() {
-  // Stop current audio and clear entire queue
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.src = "";
@@ -77,7 +76,6 @@ async function startCall() {
       const msg = JSON.parse(event.data);
       handleControlMessage(msg);
     } else {
-      // Binary = synthesized reply audio (mp3 bytes) from ElevenLabs
       playReplyAudio(event.data);
     }
   };
@@ -97,26 +95,30 @@ function handleControlMessage(msg) {
       statusEl.textContent = `In call (session ${msg.session_id.slice(0, 8)}...)`;
       log("Call connected", "system");
       break;
+
     case "play_greeting":
-      // Stop any lingering audio before playing greeting
       stopCurrentAudio();
       currentAudio = new Audio("/greeting.mp3");
-      currentAudio.play().catch((err) => log(`Greeting playback error: ${err.message}`));
+      currentAudio.play().catch((err) => log(`Greeting error: ${err.message}`));
+      currentAudio.onended = () => { currentAudio = null; };
       log("Agent: Hi! I'm Vishal's AI assistant. How can I help you today?", "agent");
       break;
+
     case "stop_audio":
-      // Backend detected barge-in — stop Q1 audio + clear queue immediately
-      // so Q2 answer plays cleanly with no overlap
       stopCurrentAudio();
       break;
+
     case "transcript":
       log(`You: ${msg.text}`, "user");
       break;
+
     case "reply_text":
       log(`Agent: ${msg.text}`, "agent");
       break;
+
     case "audio_ack":
-      break; // Phase 1 leftover, ignored
+      break;
+
     default:
       log(`Unknown message: ${JSON.stringify(msg)}`);
   }
@@ -125,13 +127,12 @@ function handleControlMessage(msg) {
 async function startMic() {
   mediaStream = await navigator.mediaDevices.getUserMedia({
     audio: {
-      echoCancellation: true,   // removes echo
-      noiseSuppression: true,   // removes fan/background noise ✅
-      autoGainControl: true,    // normalizes volume
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
       sampleRate: 16000,
     }
   });
-  // 16000Hz — browser resamples mic input to match VAD/Whisper requirement
   audioContext = new AudioContext({ sampleRate: 16000 });
   sourceNode = audioContext.createMediaStreamSource(mediaStream);
   const bufferSize = 4096;
@@ -152,29 +153,14 @@ async function startMic() {
 
 function stopCall() {
   isCallActive = false;
-  // Stop audio + clear queue before disconnecting
   audioQueue = [];
   isPlaying = false;
   stopCurrentAudio();
-  if (processorNode) {
-    processorNode.disconnect();
-    processorNode = null;
-  }
-  if (sourceNode) {
-    sourceNode.disconnect();
-    sourceNode = null;
-  }
-  if (audioContext) {
-    audioContext.close();
-    audioContext = null;
-  }
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop());
-    mediaStream = null;
-  }
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.close();
-  }
+  if (processorNode) { processorNode.disconnect(); processorNode = null; }
+  if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
+  if (audioContext) { audioContext.close(); audioContext = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
+  if (ws && ws.readyState === WebSocket.OPEN) { ws.close(); }
   ws = null;
   callBtn.textContent = "Start Call";
   callBtn.classList.remove("active");
