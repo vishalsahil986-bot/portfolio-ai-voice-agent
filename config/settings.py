@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY2: str = ""
     GEMINI_API_KEY3: str = ""
     GEMINI_API_KEY4: str = ""
-    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+    GEMINI_MODEL: str = "gemini-2.0-flash-lite"
 
     @property
     def GEMINI_API_KEYS(self) -> List[str]:
@@ -53,14 +53,16 @@ class Settings(BaseSettings):
         """
         Ordered list of {"api_key": ..., "voice_id": ...} pairs — a
         slot is only included if BOTH its key and voice ID are set.
-        A key with no matching voice ID is useless (nothing to
-        synthesize with), so it's silently dropped rather than
-        included half-broken.
         """
         pairs = [
             (self.ELEVENLABS_API_KEYS1, self.ELEVENLABS_VOICE_ID1),
             (self.ELEVENLABS_API_KEYS2, self.ELEVENLABS_VOICE_ID2),
             (self.ELEVENLABS_API_KEYS3, self.ELEVENLABS_VOICE_ID3),
+            (self.ELEVENLABS_API_KEYS4, self.ELEVENLABS_VOICE_ID4),
+            (self.ELEVENLABS_API_KEYS5, self.ELEVENLABS_VOICE_ID5),
+            (self.ELEVENLABS_API_KEYS6, self.ELEVENLABS_VOICE_ID6),
+            (self.ELEVENLABS_API_KEYS7, self.ELEVENLABS_VOICE_ID7),
+            (self.ELEVENLABS_API_KEYS8, self.ELEVENLABS_VOICE_ID8),
         ]
         return [
             {"api_key": key.strip(), "voice_id": voice.strip()}
@@ -72,7 +74,6 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000
     AUDIO_CHUNK_MS: int = 30  
     SILENCE_THRESHOLD_MS: int = 700  
-
 
     #  RAG (Pinecone + HuggingFace)
     PINECONE_API_KEY: str = ""

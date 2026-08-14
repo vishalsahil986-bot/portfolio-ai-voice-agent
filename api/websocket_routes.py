@@ -1,3 +1,22 @@
+"""
+api/websocket_routes.py
+
+WebSocket endpoint: full voice agent pipeline.
+
+Pipeline order per turn:
+  VAD speech_ended
+    → Whisper STT
+    → Load/create MongoDB session
+    → Retrieve RAG chunks
+    → build_gemini_context()   [3-phase memory]
+    → Gemini LLM
+    → bot_response
+    → ElevenLabs TTS
+    → Send audio + transcript via WebSocket
+    → asyncio.create_task(summarize_exchange_in_background())
+    → Update session state (last_messages, message_count)
+"""
+
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -18,136 +37,165 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 router = APIRouter()
 
+_MIN_TRANSCRIPT_LENGTH = 4
+_JUNK_PHRASES = frozenset([". . .", "...", "you", "bye", "thanks", "thank you"])
+
+# Minimum audio duration (seconds) to bother transcribing — prevents Whisper
+# wasting time on sub-200ms noise bursts that passed VAD.
+_MIN_AUDIO_DURATION_SECONDS = 0.4
+
 
 async def _handle_speech_started(session: Session, websocket: WebSocket) -> None:
     if session.state_machine.state == CallState.SPEAKING:
-        session.state_machine.interrupt()
-        session.interrupted = True
-        await websocket.send_json({"type": "stop_audio"})  # ← THIS sends stop signal
+        # Barge-in disabled — ignore speech while agent is talking
+        return
     session.utterance_buffer.reset()
 
 
 async def _handle_speech_ended(session: Session, websocket: WebSocket) -> None:
+    """
+    Full turn processing pipeline.
+    Always returns the session to LISTENING state — even on errors —
+    so the agent never gets permanently stuck in THINKING.
+    """
     audio = session.utterance_buffer.get_audio()
     session.utterance_buffer.reset()
 
     if not audio:
         return
 
+    # Reject very short audio bursts that slipped past VAD (< 400ms)
+    duration = len(audio) / 2 / 16000  # 16-bit mono at 16kHz
+    if duration < _MIN_AUDIO_DURATION_SECONDS:
+        logger.info(f"[{session.session_id}] Audio too short ({duration:.2f}s) — skipping")
+        return
+
     session.interrupted = False
-    #session.state_machine.transition(CallState.THINKING)
+
+    # Guard against concurrent processing
     if session.state_machine.state != CallState.LISTENING:
-        logger.info(f"[{session.session_id}] skipping — still processing previous turn")
-        return  # another task is already processing, skip this one
+        logger.info(f"[{session.session_id}] Skipping — still processing previous turn")
+        return
+
     session.state_machine.transition(CallState.THINKING)
 
-    text = await asyncio.to_thread(whisper_stt.transcribe, audio, language="en")
+    try:
+        await _process_turn(session, websocket, audio)
+    except Exception as e:
+        logger.error(f"[{session.session_id}] Unhandled error in turn processing: {e}")
+    finally:
+        # ALWAYS return to LISTENING so the session is never stuck
+        if session.state_machine.state != CallState.LISTENING:
+            session.state_machine.interrupt()
 
-    if not text or len(text.strip()) < 4:  # too short = noise
-        session.state_machine.transition(CallState.LISTENING)
+
+async def _process_turn(session: Session, websocket: WebSocket, audio: bytes) -> None:
+    """Inner pipeline — separated so _handle_speech_ended can always clean up."""
+
+    # ── STT ───────────────────────────────────────────────────────────────────
+    user_text = await asyncio.to_thread(whisper_stt.transcribe, audio, language="en")
+
+    if not user_text or len(user_text.strip()) < _MIN_TRANSCRIPT_LENGTH:
+        logger.info(f"[{session.session_id}] Transcript too short or empty — skipping")
         return
 
-    # Filter common Whisper hallucinations on silence
-    JUNK_PHRASES = [". . .", "...", "you", "bye", "thanks", "thank you"]
-    if text.strip().lower() in JUNK_PHRASES:
-        logger.info(f"[{session.session_id}] filtered junk transcription: '{text}'")
-        session.state_machine.transition(CallState.LISTENING)
+    if user_text.strip().lower() in _JUNK_PHRASES:
+        logger.info(f"[{session.session_id}] Filtered junk: '{user_text}'")
         return
 
+    await websocket.send_json({"type": "transcript", "text": user_text})
 
-    if not text:
-        session.state_machine.transition(CallState.LISTENING)
-        return
+    # ── Session: get pre-increment message count ───────────────────────────────
+    # Returns count BEFORE incrementing: 0=Phase1, 1=Phase2, 2+=Phase3
+    message_count = await memory_manager.increment_message_count(session.session_id)
 
-    await websocket.send_json({"type": "transcript", "text": text})
+    # ── RAG retrieval ─────────────────────────────────────────────────────────
+    retrieved_context = await asyncio.to_thread(retriever.retrieve, user_text)
 
-    #  Phase 5: increment message count + build memory context 
-    msg_count = await memory_manager.increment_message_count(session.session_id)
-
-    #  Phase 4: RAG retrieval 
-    context = await asyncio.to_thread(retriever.retrieve, text)
-
-    #  Build full Gemini context (summaries + recent turns + RAG) 
+    # ── Build memory context (3-phase algorithm) ──────────────────────────────
     contents = await build_gemini_context(
         session_id=session.session_id,
-        conversation_history=session.conversation_history,
-        new_user_text=text,
-        retrieved_context=context,
-        message_count=msg_count,
+        new_user_text=user_text,
+        retrieved_context=retrieved_context,
+        message_count=message_count,
     )
 
-    #  Gemini LLM call 
+    # ── Gemini LLM ────────────────────────────────────────────────────────────
     try:
-        reply_text = await asyncio.to_thread(
+        bot_text = await asyncio.to_thread(
             gemini_service.generate_reply_from_contents, contents
         )
     except AllGeminiKeysExhausted:
-        logger.error(f"[{session.session_id}] all Gemini keys exhausted, skipping this turn")
-        session.state_machine.transition(CallState.LISTENING)
+        logger.error(f"[{session.session_id}] All Gemini keys exhausted")
         return
     except GeminiApiError as e:
-        logger.error(f"[{session.session_id}] Gemini call failed: {e}")
-        session.state_machine.transition(CallState.LISTENING)
+        logger.error(f"[{session.session_id}] Gemini API error: {e}")
         return
 
-    if not reply_text:
-        session.state_machine.transition(CallState.LISTENING)
+    if not bot_text:
+        logger.warning(f"[{session.session_id}] Gemini returned empty reply — skipping TTS")
         return
 
-    #  Save turn to in-RAM history 
-    session.conversation_history.append({"role": "user", "text": text})
-    session.conversation_history.append({"role": "model", "text": reply_text})
-
-    #  Phase 5: fire background summarization 
-    await summarize_exchange_in_background(
-        session_id=session.session_id,
-        user_text=text,
-        bot_text=reply_text,
-        message_count=msg_count,
-    )
-
+    # ── ElevenLabs TTS ────────────────────────────────────────────────────────
     session.state_machine.transition(CallState.SPEAKING)
 
-    #  ElevenLabs TTS 
     try:
-        reply_audio = await asyncio.to_thread(voice_manager.synthesize, reply_text)
+        reply_audio = await asyncio.to_thread(voice_manager.synthesize, bot_text)
     except AllElevenLabsKeysExhausted:
-        logger.error(f"[{session.session_id}] all ElevenLabs accounts exhausted, skipping TTS")
-        session.state_machine.transition(CallState.LISTENING)
+        logger.error(f"[{session.session_id}] All ElevenLabs accounts exhausted")
+        session.state_machine.interrupt()
         return
     except ApiError as e:
-        logger.error(f"[{session.session_id}] ElevenLabs TTS failed: {e}")
-        session.state_machine.transition(CallState.LISTENING)
+        logger.error(f"[{session.session_id}] ElevenLabs TTS error: {e}")
+        session.state_machine.interrupt()
         return
 
+    # ── Send response ─────────────────────────────────────────────────────────
     if session.interrupted:
-        logger.info(f"[{session.session_id}] reply discarded, user interrupted during synthesis")
+        logger.info(f"[{session.session_id}] Reply discarded — barge-in during synthesis")
     else:
-        await websocket.send_json({"type": "reply_text", "text": reply_text})
+        await websocket.send_json({"type": "reply_text", "text": bot_text})
         await websocket.send_bytes(reply_audio)
 
     if session.state_machine.state == CallState.SPEAKING:
         session.state_machine.transition(CallState.LISTENING)
 
+    # ── Non-blocking background summarization ─────────────────────────────────
+    await summarize_exchange_in_background(
+        session_id=session.session_id,
+        user_text=user_text,
+        bot_text=bot_text,
+        message_count=message_count,
+    )
+
+    # ── Update last_messages in MongoDB (used for Phase 2 context) ───────────
+    asyncio.create_task(
+        memory_manager.update_last_messages(
+            session_id=session.session_id,
+            user_message=user_text,
+            assistant_message=bot_text,
+        )
+    )
+
+    # Mirror to in-RAM session
+    session.conversation_history.append({"role": "user", "text": user_text})
+    session.conversation_history.append({"role": "model", "text": bot_text})
+    session.message_count = message_count + 1
+    session.last_messages = {"user": user_text, "assistant": bot_text}
+
 
 @router.websocket("/ws/call")
 async def call_websocket(websocket: WebSocket):
     await websocket.accept()
+
     session = session_manager.create_session()
+    await memory_manager.create_session(session.session_id)
 
     await websocket.send_json({
         "type": "session_started",
         "session_id": session.session_id,
     })
-
-    # Send greeting signal immediately ✅
     await websocket.send_json({"type": "play_greeting"})
-
-
-
-    await websocket.send_json({
-        "type": "play_greeting"  # browser plays pre-recorded audio
-    })
 
     try:
         while True:
@@ -171,9 +219,12 @@ async def call_websocket(websocket: WebSocket):
                         session.utterance_buffer.add(frame)
 
             elif "text" in message and message["text"] is not None:
-                logger.info(f"[{session.session_id}] control message: {message['text']}")
+                logger.info(f"[{session.session_id}] Control: {message['text']}")
 
     except WebSocketDisconnect:
-        logger.info(f"[{session.session_id}] client disconnected")
+        logger.info(f"[{session.session_id}] Client disconnected")
+    except Exception as e:
+        logger.error(f"[{session.session_id}] WebSocket error: {e}")
     finally:
         session_manager.end_session(session.session_id)
+        logger.info(f"[{session.session_id}] Session cleaned up")

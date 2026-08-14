@@ -1,49 +1,116 @@
+"""
+memory/summarizer.py
+
+Background exchange summarization using Gemini.
+Fires as asyncio.create_task() so it never blocks the WebSocket response.
+"""
+
 import asyncio
 import json
+import re
 from typing import Optional
 
 from google.genai import types
+
 from memory.memory_manager import memory_manager
-from config.settings import settings
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_SUMMARIZE_PROMPT = """Summarize this conversation exchange in JSON format.
-Return ONLY valid JSON, no markdown, no explanation, no preamble.
+_SUMMARIZE_PROMPT = """Summarize this exchange in strict JSON with exactly these keys:
+user_intent, bot_response, context.
+Respond ONLY with valid JSON. No markdown. No explanation. No preamble.
 
 Exchange:
 User: {user_text}
 Assistant: {bot_text}
 
-Return exactly this structure:
+Expected format:
 {{
-  "user_intent": "what the user was asking or trying to do (one sentence)",
-  "bot_response": "what the assistant replied or did (one sentence)",
-  "context": "key facts to remember for the rest of the call (one sentence)"
+  "user_intent": "what the user wanted (1 sentence)",
+  "bot_response": "what the bot said (1-2 sentences)",
+  "context": "important details to remember for future turns"
 }}"""
+
+# Regex to strip JSON code blocks from bot_response before summarizing
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\{.*?\}\s*```", re.DOTALL)
+
+
+def _strip_json_blocks(text: str) -> str:
+    """Remove embedded JSON/code blocks from bot response before summarization."""
+    return _JSON_BLOCK_RE.sub("", text).strip()
+
+
+def _normalize_smart_quotes(text: str) -> str:
+    """Replace Unicode smart quotes with standard ASCII quotes for JSON parsing."""
+    replacements = {
+        "\u2018": "'",   # '
+        "\u2019": "'",   # '
+        "\u201c": '"',   # "
+        "\u201d": '"',   # "
+        "\u2032": "'",   # ′
+        "\u2033": '"',   # ″
+    }
+    for smart, plain in replacements.items():
+        text = text.replace(smart, plain)
+    return text
+
+
+def _extract_text_from_response(response_content) -> str:
+    """
+    Handle Gemini returning content as either a list of blocks or a plain string.
+    """
+    if isinstance(response_content, list):
+        return " ".join(
+            block.get("text", "")
+            for block in response_content
+            if isinstance(block, dict)
+        )
+    if isinstance(response_content, str):
+        return response_content
+    return str(response_content)
 
 
 def _parse_summary(raw: str) -> Optional[dict]:
     """
-    Safely parse Gemini's JSON response.
-    Strips markdown fences if Gemini adds them despite the prompt.
-    Returns None if parsing fails — caller handles the fallback.
+    Safely parse Gemini's JSON summary response.
+
+    Handles:
+    - Markdown code fences (```json ... ```)
+    - Smart/curly quotes
+    - Missing required keys
+    - Malformed JSON
     """
     try:
         clean = raw.strip()
-        if clean.startswith("```"):
 
+        # Strip markdown fences
+        if clean.startswith("```"):
             lines = clean.split("\n")
-            clean = "\n".join(lines[1:-1])
+            # Remove first line (```json or ```) and last line (```)
+            inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+            clean = "\n".join(inner).strip()
+
+        # Normalize smart quotes
+        clean = _normalize_smart_quotes(clean)
+
+        # Remove any remaining control characters that break JSON
+        clean = clean.replace("\x00", "")
+
         parsed = json.loads(clean)
 
-        if all(k in parsed for k in ("user_intent", "bot_response", "context")):
-            return parsed
-        logger.warning("Summary JSON missing required fields")
+        required_keys = ("user_intent", "bot_response", "context")
+        if all(k in parsed for k in required_keys):
+            return {k: str(parsed[k]) for k in required_keys}
+
+        logger.warning(f"Summary JSON missing required keys — got: {list(parsed.keys())}")
         return None
+
     except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse summary JSON: {e} — raw: {raw[:200]}")
+        logger.warning(f"Failed to parse summary JSON: {e} — raw: {raw[:300]}")
+        return None
+    except Exception as e:
+        logger.warning(f"Unexpected error parsing summary: {e}")
         return None
 
 
@@ -54,24 +121,27 @@ async def summarize_exchange_in_background(
     message_count: int,
 ) -> None:
     """
-    Decide whether to summarize and fire as background task.
+    Decide whether to summarize and fire as a non-blocking background task.
 
-    message_count: the CURRENT count after this turn.
-    Summarization starts from message 3 onwards — first two messages
-    are kept raw (first exchange stays in conversation_history).
+    message_count: the PRE-increment count at the time of the turn.
+      - message_count == 0 → Turn 1: no summarization
+      - message_count == 1 → Turn 2: summarize the completed exchange
+      - message_count >= 2 → Turn 3+: summarize the completed exchange
 
-    Called from websocket_routes.py after every completed turn.
+    Called from websocket_routes.py after every completed exchange.
+    The WebSocket response is already sent before this is called.
     """
     if not memory_manager.is_configured:
         return
 
-    if message_count < 3:
-        logger.info(f"[{session_id}] Message {message_count} — no summarization yet")
+    # Turn 1 (message_count == 0 before increment) — no summarization needed
+    if message_count < 1:
+        logger.info(f"[{session_id}] Turn 1 — skipping summarization")
         return
 
     logger.info(
-        f"[{session_id}] Message {message_count} — "
-        f"firing background summarization of previous exchange"
+        f"[{session_id}] Firing background summarization "
+        f"(message_count={message_count})"
     )
     asyncio.create_task(
         _run_summarization(session_id, user_text, bot_text)
@@ -84,35 +154,45 @@ async def _run_summarization(
     bot_text: str,
 ) -> None:
     """
-    The actual summarization — runs in background, errors never surface to user.
-    Uses gemini_service with temperature 0.1 for consistent structured output.
+    Actual summarization — runs in background.
+    Errors are caught and logged; they never surface to the WebSocket.
     """
     try:
-        from llm.gemini_service import gemini_service
+        from llm.gemini_service import gemini_service  # local import avoids circular dependency
+
+        # Strip any JSON blocks from bot_text before summarizing
+        clean_bot_text = _strip_json_blocks(bot_text)
 
         prompt = _SUMMARIZE_PROMPT.format(
             user_text=user_text,
-            bot_text=bot_text,
+            bot_text=clean_bot_text,
         )
 
-        logger.info(f"[{session_id}] Summarizing exchange with Gemini (low temp)...")
+        logger.info(f"[{session_id}] Summarizing exchange with Gemini...")
 
         contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
-        raw_summary = await asyncio.to_thread(
+        raw_response = await asyncio.to_thread(
             gemini_service.generate_reply_from_contents,
             contents,
         )
 
-        if not raw_summary:
-            logger.warning(f"[{session_id}] Gemini returned empty summary — skipping")
-            return
+        if not raw_response:
+            logger.warning(f"[{session_id}] Gemini returned empty summary — using fallback")
+            raw_text = ""
+        else:
+            # Handle list or string content
+            raw_text = _extract_text_from_response(raw_response)
 
-        summary = _parse_summary(raw_summary)
+        summary = None
+        if raw_text:
+            summary = _parse_summary(raw_text)
+
         if not summary:
+            # Graceful fallback — store truncated raw exchange
             summary = {
-                "user_intent": user_text[:200],
-                "bot_response": bot_text[:200],
-                "context": "Exchange summarization failed — raw text stored",
+                "user_intent": user_text[:150],
+                "bot_response": clean_bot_text[:150],
+                "context": "Auto-generated fallback summary",
             }
             logger.warning(f"[{session_id}] Using fallback plain-text summary")
 
@@ -120,4 +200,5 @@ async def _run_summarization(
         logger.info(f"[{session_id}] Exchange summarized and saved ✅")
 
     except Exception as e:
-        logger.error(f"[{session_id}] Summarization task failed: {e}")
+        logger.error(f"[{session_id}] Background summarization failed: {e}")
+        # Do NOT re-raise — background task failures must never affect the WebSocket

@@ -1,3 +1,11 @@
+"""
+call/session_manager.py
+
+In-memory session state for a single WebSocket connection.
+MongoDB (via memory_manager) is the source of persistent state.
+This class holds only the runtime state needed during the call.
+"""
+
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -17,8 +25,17 @@ class Session:
     vad: VoiceActivityDetector = field(init=False)
     frame_buffer: FrameBuffer = field(init=False)
     utterance_buffer: UtteranceBuffer = field(init=False)
+
+    # In-RAM conversation history (used only as ephemeral reference, NOT sent to Gemini directly)
     conversation_history: List[dict] = field(default_factory=list, init=False)
+
+    # Interrupt flag set by barge-in
     interrupted: bool = field(default=False, init=False)
+
+    # Memory state mirrored from MongoDB for quick access within a turn
+    # These are updated after each turn but MongoDB remains the source of truth
+    message_count: int = field(default=0, init=False)
+    last_messages: dict = field(default_factory=dict, init=False)
 
     def __post_init__(self):
         self.state_machine = CallStateMachine(self.session_id)
