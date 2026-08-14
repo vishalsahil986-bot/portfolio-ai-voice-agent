@@ -59,19 +59,7 @@ async def _init_memory() -> None:
 
 
 async def _warmup_models() -> None:
-    """Load all heavy models at startup so the first user request is instant."""
-    try:
-        from audio.stt_whisper import whisper_stt
-        from rag.embeddings import embedding_service
-        from rag.vector_store import vector_store
-
-        logger.info("Warming up models...")
-        await asyncio.to_thread(whisper_stt._ensure_loaded)
-        await asyncio.to_thread(embedding_service._ensure_loaded)
-        await asyncio.to_thread(vector_store._ensure_index)
-        logger.info("All models warmed up ✅")
-    except Exception as e:
-        logger.error(f"Model warmup failed: {e}")
+    logger.info("Model warmup skipped — lazy loading enabled")
 
 
 app = create_app()
