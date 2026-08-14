@@ -1,4 +1,5 @@
-const WS_URL = "ws://localhost:8000/ws/call";
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/call`);
 const callBtn = document.getElementById("callBtn");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
