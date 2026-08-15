@@ -35,9 +35,15 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup():
         logger.info("AI Voice Agent (Sada) starting up...")
-        # Initialize MongoDB TTL index and warm up models concurrently
         asyncio.create_task(_init_memory())
-        asyncio.create_task(_warmup_models())
+    
+    async def _init_memory() -> None:
+        try:
+            from memory.memory_manager import memory_manager
+            await memory_manager.initialize()
+            logger.info("Memory manager initialized ✅")
+        except Exception as e:
+            logger.error(f"Memory manager initialization failed: {e}")
 
     @app.on_event("shutdown")
     async def on_shutdown():
