@@ -183,6 +183,18 @@ async def _process_turn(session: Session, websocket: WebSocket, audio: bytes) ->
     session.message_count = message_count + 1
     session.last_messages = {"user": user_text, "assistant": bot_text}
 
+async def _preload_models():
+    try:
+        from audio.stt_whisper import whisper_stt
+        from rag.embeddings import embedding_service
+        from rag.vector_store import vector_store
+        await asyncio.to_thread(whisper_stt._ensure_loaded)
+        await asyncio.to_thread(embedding_service._ensure_loaded)
+        await asyncio.to_thread(vector_store._ensure_index)
+        logger.info("Background model preload complete ✅")
+    except Exception as e:
+        logger.error(f"Background preload failed: {e}")
+
 
 @router.websocket("/ws/call")
 async def call_websocket(websocket: WebSocket):
@@ -196,6 +208,7 @@ async def call_websocket(websocket: WebSocket):
         "session_id": session.session_id,
     })
     await websocket.send_json({"type": "play_greeting"})
+    asyncio.create_task(_preload_models()) 
 
     try:
         while True:
