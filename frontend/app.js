@@ -1,5 +1,3 @@
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/call`);
 const callBtn = document.getElementById("callBtn");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
@@ -66,7 +64,8 @@ function playReplyAudio(arrayBuffer) {
 }
 
 async function startCall() {
-  ws = new WebSocket(WS_URL);
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/call`);
   ws.binaryType = "arraybuffer";
   ws.onopen = async () => {
     statusEl.textContent = "Connected — starting mic...";
