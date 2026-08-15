@@ -58,18 +58,8 @@ async def _init_memory() -> None:
         logger.error(f"Memory manager initialization failed: {e}")
 
 
-async def _preload_models():
-    """Load models in background while greeting plays."""
-    try:
-        from audio.stt_whisper import whisper_stt
-        from rag.embeddings import embedding_service
-        from rag.vector_store import vector_store
-        await asyncio.to_thread(whisper_stt._ensure_loaded)
-        await asyncio.to_thread(embedding_service._ensure_loaded)
-        await asyncio.to_thread(vector_store._ensure_index)
-        logger.info("Background model preload complete ✅")
-    except Exception as e:
-        logger.error(f"Background preload failed: {e}")
+async def _warmup_models() -> None:
+    logger.info("Model warmup skipped — lazy loading enabled")
 
 
 app = create_app()
